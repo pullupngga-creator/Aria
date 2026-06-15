@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Aria AI | Sources Vault</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;family=JetBrains+Mono:wght@100..800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "tertiary": "#c7c6c9",
+                      "background": "#111316",
+                      "on-primary-fixed-variant": "#004492",
+                      "error-container": "#93000a",
+                      "inverse-surface": "#e2e2e6",
+                      "surface-container-high": "#282a2d",
+                      "accent-success": "#22C55E",
+                      "on-error": "#690005",
+                      "surface-bright": "#37393c",
+                      "secondary-container": "#48494c",
+                      "surface-container-lowest": "#0c0e11",
+                      "on-background": "#e2e2e6",
+                      "outline": "#8c909f",
+                      "on-tertiary-fixed-variant": "#464749",
+                      "border-hairline": "#2A2B2F",
+                      "on-secondary-container": "#b9b8bc",
+                      "surface": "#111316",
+                      "accent-error": "#EF4444",
+                      "glow-electric": "rgba(77, 144, 254, 0.15)",
+                      "on-primary": "#002f68",
+                      "on-secondary-fixed-variant": "#46474a",
+                      "on-error-container": "#ffdad6",
+                      "tertiary-fixed": "#e3e2e4",
+                      "error": "#ffb4ab",
+                      "bg-elevated": "#1E1F23",
+                      "surface-tint": "#acc7ff",
+                      "on-primary-container": "#00295d",
+                      "surface-variant": "#333538",
+                      "surface-container": "#1e2023",
+                      "on-secondary-fixed": "#1a1b1e",
+                      "surface-container-highest": "#333538",
+                      "tertiary-container": "#929294",
+                      "on-tertiary-fixed": "#1b1c1e",
+                      "surface-dim": "#111316",
+                      "border-subtle": "#3A3B3F",
+                      "primary": "#acc7ff",
+                      "on-primary-fixed": "#001a40",
+                      "inverse-on-surface": "#2f3034",
+                      "primary-fixed": "#d7e2ff",
+                      "primary-fixed-dim": "#acc7ff",
+                      "bg-active": "#2A2B2F",
+                      "on-tertiary-container": "#2a2b2d",
+                      "on-tertiary": "#303032",
+                      "accent-warning": "#F59E0B",
+                      "secondary": "#c7c6ca",
+                      "text-muted": "#6B7280",
+                      "outline-variant": "#424753",
+                      "bg-hover": "#25262B",
+                      "on-surface": "#e2e2e6",
+                      "secondary-fixed": "#e3e2e6",
+                      "on-secondary": "#2f3033",
+                      "secondary-fixed-dim": "#c7c6ca",
+                      "inverse-primary": "#005bbf",
+                      "text-secondary": "#9CA3AF",
+                      "tertiary-fixed-dim": "#c7c6c9",
+                      "surface-container-low": "#1a1c1f",
+                      "primary-container": "#4d90fe",
+                      "on-surface-variant": "#c2c6d5"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "lg": "24px",
+                      "vault-width": "320px",
+                      "xs": "8px",
+                      "gutter": "24px",
+                      "sm": "12px",
+                      "xl": "32px",
+                      "base": "4px",
+                      "xxl": "48px",
+                      "md": "16px"
+              },
+              "fontFamily": {
+                      "headline-md": ["Geist"],
+                      "badge": ["JetBrains Mono"],
+                      "headline-lg-mobile": ["Geist"],
+                      "body": ["Geist"],
+                      "headline-lg": ["Geist"],
+                      "metadata": ["JetBrains Mono"],
+                      "display": ["Geist"]
+              },
+              "fontSize": {
+                      "headline-md": ["16px", {"lineHeight": "1.4", "fontWeight": "500"}],
+                      "badge": ["11px", {"lineHeight": "1.3", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                      "body": ["14px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                      "headline-lg": ["20px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                      "metadata": ["12px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                      "display": ["28px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2A2B2F;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3A3B3F;
+        }
+        .glow-active {
+            box-shadow: inset 0 0 20px rgba(77, 144, 254, 0.1);
+        }
+        .message-stream {
+            mask-image: linear-gradient(to bottom, transparent, black 5%);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body h-screen flex overflow-hidden">
+<!-- SIDE NAV: SOURCES VAULT -->
+<aside class="w-vault-width h-screen fixed left-0 top-0 bg-surface-container-lowest flex flex-col border-r border-border-hairline z-20">
+<!-- Vault Header -->
+<div class="px-md py-lg flex flex-col gap-md">
+<div class="flex items-center justify-between">
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Sources Vault</h2>
+<button class="flex items-center gap-xs px-sm py-xs border border-primary text-primary rounded-lg hover:bg-glow-electric transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined text-[18px]">add_road</span>
+<span class="font-headline-md text-headline-md">Add Source</span>
+</button>
+</div>
+<!-- Search -->
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-sm top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px] pointer-events-none group-focus-within:text-primary transition-colors">search</span>
+<input class="w-full bg-bg-elevated border-none rounded-lg pl-xl pr-md py-xs text-body font-body text-on-surface placeholder:text-on-surface-variant focus:ring-1 focus:ring-primary transition-all" placeholder="Search document..." type="text"/>
+</div>
+</div>
+<!-- Sources List -->
+<nav class="flex-1 overflow-y-auto px-xs space-y-base">
+<!-- Active Item -->
+<div class="flex items-center gap-sm p-sm cursor-pointer rounded-r-lg border-l-2 border-primary bg-glow-electric glow-active transition-colors group">
+<span class="material-symbols-outlined text-primary" data-weight="fill">add_circle_outline</span>
+<div class="flex flex-col flex-1 min-w-0">
+<span class="text-body font-bold text-primary truncate">Q3_Revenue_Analysis.pdf</span>
+<span class="text-metadata font-metadata text-on-surface-variant/60">4,281 words</span>
+</div>
+</div>
+<!-- Inactive Items -->
+<div class="flex items-center gap-sm p-sm cursor-pointer rounded-lg hover:bg-bg-hover transition-colors group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-on-surface">add_circle_outline</span>
+<div class="flex flex-col flex-1 min-w-0">
+<span class="text-body font-medium text-on-surface-variant group-hover:text-on-surface truncate">Legal_Framework_V2.docx</span>
+<span class="text-metadata font-metadata text-on-surface-variant/40">1,920 words</span>
+</div>
+</div>
+<div class="flex items-center gap-sm p-sm cursor-pointer rounded-lg hover:bg-bg-hover transition-colors group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-on-surface">add_circle_outline</span>
+<div class="flex flex-col flex-1 min-w-0">
+<span class="text-body font-medium text-on-surface-variant group-hover:text-on-surface truncate">Market_Synthesis_Draft.txt</span>
+<span class="text-metadata font-metadata text-on-surface-variant/40">12,500 words</span>
+</div>
+</div>
+<div class="flex items-center gap-sm p-sm cursor-pointer rounded-lg hover:bg-bg-hover transition-colors group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-on-surface">add_circle_outline</span>
+<div class="flex flex-col flex-1 min-w-0">
+<span class="text-body font-medium text-on-surface-variant group-hover:text-on-surface truncate">Technical_Specs_Aria.md</span>
+<span class="text-metadata font-metadata text-on-surface-variant/40">840 words</span>
+</div>
+</div>
+<!-- Repeat for visual density -->
+<div class="pt-xl px-sm pb-xs">
+<span class="text-metadata font-badge uppercase tracking-widest text-on-surface-variant/40">Archives</span>
+</div>
+<div class="flex items-center gap-sm p-sm cursor-pointer rounded-lg hover:bg-bg-hover transition-colors group opacity-60 hover:opacity-100">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-on-surface">inventory_2</span>
+<div class="flex flex-col flex-1 min-w-0">
+<span class="text-body font-medium text-on-surface-variant group-hover:text-on-surface truncate">Legacy_Notes_2023.pdf</span>
+<span class="text-metadata font-metadata text-on-surface-variant/40">5.2 MB</span>
+</div>
+</div>
+</nav>
+<!-- Footer -->
+<div class="p-md border-t border-border-hairline flex flex-col gap-xs">
+<div class="flex items-center gap-sm p-sm rounded-lg hover:bg-bg-hover transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-on-surface">settings</span>
+<span class="text-body font-medium text-on-surface-variant group-hover:text-on-surface">Settings</span>
+</div>
+<div class="flex items-center gap-sm p-sm rounded-lg hover:bg-bg-hover transition-colors cursor-pointer group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-on-surface">help_outline</span>
+<span class="text-body font-medium text-on-surface-variant group-hover:text-on-surface">Support</span>
+</div>
+</div>
+</aside>
+<!-- MAIN CANVAS: CHAT -->
+<main class="ml-vault-width flex-1 flex flex-col h-screen bg-surface-container relative">
+<!-- Top App Bar -->
+<header class="h-16 px-lg flex items-center justify-between border-b border-border-hairline bg-surface-container sticky top-0 z-10">
+<div class="flex items-center gap-lg">
+<div class="flex items-center gap-md">
+<h1 class="font-headline-md text-headline-md text-on-surface">New Conversation</h1>
+<div class="flex items-center gap-xs px-xs py-[2px] bg-bg-elevated rounded border border-border-hairline cursor-pointer hover:border-primary transition-colors">
+<span class="text-metadata font-metadata text-primary">Aria-4.0-Pro</span>
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant">expand_more</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<div class="flex items-center gap-xs px-sm py-1 bg-accent-success/10 rounded-full">
+<div class="w-1.5 h-1.5 rounded-full bg-accent-success animate-pulse"></div>
+<span class="text-metadata font-metadata text-accent-success">Cloud Model Engine Connected</span>
+</div>
+<div class="flex items-center gap-sm">
+<button class="p-xs text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-xs text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">share</span>
+</button>
+<button class="p-xs text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Chat Stream Canvas -->
+<div class="flex-1 overflow-y-auto message-stream scroll-smooth">
+<div class="max-w-4xl mx-auto px-lg py-xl flex flex-col gap-xl">
+<!-- AI Message -->
+<div class="flex flex-col gap-sm">
+<div class="flex items-center gap-sm text-primary">
+<span class="material-symbols-outlined text-[20px]">magic_button</span>
+<span class="text-metadata font-badge tracking-wider uppercase">Aria Intelligence</span>
+</div>
+<div class="text-body font-body leading-[1.6] text-on-surface space-y-md">
+<p>Greetings. I've finished indexing the sources in your <span class="px-1.5 py-0.5 bg-glow-electric text-primary rounded border border-primary/20">Sources Vault</span>. I noticed several discrepancies in the Q3 revenue forecasting when compared to the legal framework documents.</p>
+<p>Would you like me to synthesize a comparative analysis or focus on the technical specifications for the next quarter?</p>
+</div>
+</div>
+<!-- User Message -->
+<div class="flex flex-col gap-sm items-end">
+<div class="bg-bg-elevated p-md rounded-xl max-w-[80%] border border-border-hairline shadow-sm">
+<p class="text-body font-body text-on-surface">Please synthesize a comparative analysis. Focus specifically on the <span class="text-primary font-bold">@Q3_Revenue_Analysis.pdf</span> data points against the risk factors outlined in the legal docs.</p>
+</div>
+<span class="text-metadata font-metadata text-on-surface-variant/40 px-xs">Delivered · 2:14 PM</span>
+</div>
+<!-- AI Message (Complex Layout) -->
+<div class="flex flex-col gap-sm">
+<div class="flex items-center gap-sm text-primary">
+<span class="material-symbols-outlined text-[20px]">magic_button</span>
+<span class="text-metadata font-badge tracking-wider uppercase">Aria Intelligence</span>
+</div>
+<div class="text-body font-body leading-[1.6] text-on-surface space-y-md">
+<p>Processing multidimensional synthesis... I have identified 3 critical intersections between your revenue projections and the current legal constraints:</p>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md pt-sm">
+<div class="p-md bg-surface-container-low rounded-lg border border-border-hairline hover:border-primary/40 transition-colors group">
+<h4 class="text-headline-md font-headline-md text-primary mb-xs">Liability Exposure</h4>
+<p class="text-metadata text-on-surface-variant">Section 4.2 of the Legal_Framework mandates stricter buffer zones than the current Q3 model accounts for.</p>
+</div>
+<div class="p-md bg-surface-container-low rounded-lg border border-border-hairline hover:border-primary/40 transition-colors group">
+<h4 class="text-headline-md font-headline-md text-primary mb-xs">Tax Compliance</h4>
+<p class="text-metadata text-on-surface-variant">The synthesized revenue streams from international partners require an updated filing methodology.</p>
+</div>
+</div>
+<div class="mt-md p-md bg-surface-container-lowest rounded-lg border border-border-hairline overflow-hidden relative">
+<div class="absolute inset-0 opacity-10 pointer-events-none">
+
+</div>
+<code class="text-metadata font-metadata text-accent-success block">
+                                [SYSTEM_INFO] Synthetic reconciliation complete.<br/>
+                                [COMPLIANCE_LEVEL] 82.4% (Warning: Requires review)
+                            </code>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Input Area (Fixed Bottom) -->
+<footer class="p-lg bg-surface-container">
+<div class="max-w-4xl mx-auto flex flex-col gap-sm">
+<!-- Mentions/Chips Area -->
+<div class="flex flex-wrap gap-xs min-h-[32px]">
+<div class="flex items-center gap-xs px-sm py-1 bg-primary text-on-primary-container rounded-full text-badge font-badge shadow-lg shadow-primary/20">
+<span>@Q3_Revenue_Analysis.pdf</span>
+<button class="hover:bg-white/20 rounded-full p-[2px] transition-colors">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+<div class="flex items-center gap-xs px-sm py-1 bg-surface-variant text-on-surface-variant rounded-full text-badge font-badge">
+<span>@Legal_Framework_V2.docx</span>
+<button class="hover:bg-white/10 rounded-full p-[2px] transition-colors">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+</div>
+<!-- Input Field -->
+<div class="bg-bg-elevated rounded-2xl p-sm border border-border-hairline shadow-xl flex items-end gap-md focus-within:ring-1 focus-within:ring-primary/50 transition-shadow">
+<button class="p-xs text-on-surface-variant hover:text-primary transition-colors flex-shrink-0">
+<span class="material-symbols-outlined">attach_file</span>
+</button>
+<textarea class="flex-1 bg-transparent border-none focus:ring-0 text-body font-body resize-none py-xs max-h-48 scrollbar-hide" placeholder="Ask Aria anything... Use @ to reference vault sources." rows="1"></textarea>
+<div class="flex items-center gap-sm">
+<button class="p-xs text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">mic</span>
+</button>
+<button class="w-10 h-10 rounded-full bg-on-surface text-background flex items-center justify-center hover:scale-105 active:scale-95 transition-transform shadow-lg">
+<span class="material-symbols-outlined font-bold">arrow_upward_alt</span>
+</button>
+</div>
+</div>
+<div class="text-center">
+<span class="text-metadata font-metadata text-on-surface-variant/30">Aria may produce inaccurate information about people, places, or facts.</span>
+</div>
+</div>
+</footer>
+<!-- Toast Notification (Floating) -->
+<div class="fixed bottom-xl right-xl bg-bg-elevated border-l-4 border-primary p-md rounded shadow-2xl flex items-start gap-md z-50 transform translate-y-0 opacity-100 animate-in fade-in slide-in-from-bottom-5">
+<span class="material-symbols-outlined text-primary">info</span>
+<div class="flex flex-col min-w-[200px]">
+<span class="text-body font-bold text-on-surface">Synthesis Complete</span>
+<span class="text-metadata text-on-surface-variant">The report has been saved to Archives.</span>
+</div>
+<button class="text-on-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+</main>
+<!-- Draggable Divider Visual Only -->
+<div class="fixed left-vault-width top-0 w-[1px] h-full bg-border-hairline cursor-col-resize hover:bg-primary transition-colors z-30"></div>
+<script>
+        // Micro-interaction for the auto-expanding textarea
+        const textarea = document.querySelector('textarea');
+        textarea.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = (this.scrollHeight) + 'px';
+        });
+
+        // Close toast logic
+        const toast = document.querySelector('.fixed.bottom-xl');
+        const toastClose = toast.querySelector('button');
+        toastClose.addEventListener('click', () => {
+            toast.classList.add('opacity-0', 'translate-y-4');
+            setTimeout(() => toast.remove(), 300);
+        });
+    </script>
+</body></html>
