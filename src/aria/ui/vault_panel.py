@@ -1,5 +1,6 @@
 """Sources Vault panel component with document upload and list."""
 
+import asyncio
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -9,6 +10,7 @@ import flet as ft
 
 from aria.document.vault import VaultManager
 from aria.exceptions import FileSizeExceededError, UnsupportedFileTypeError, VaultError
+from aria.state import app_state
 from aria.ui.theme import COLORS, TYPOGRAPHY
 
 logger = logging.getLogger(__name__)
@@ -237,6 +239,12 @@ class VaultPanel(ft.Column):
 
     def did_mount(self) -> None:
         """Called when the control is added to the page."""
+        # Register FilePicker as a page service (required in Flet 0.85.x)
+        self._page.services.append(self.file_picker)
+        
+        # Set up state observers for reactive updates
+        app_state.add_observer("documents_changed", self._load_documents)
+        app_state.add_observer("active_documents_changed", self._load_documents)
         self._load_documents()
 
     def _load_documents(self) -> None:
@@ -269,95 +277,58 @@ class VaultPanel(ft.Column):
         self.update()
 
     def _show_document_list(self, documents: list[Any]) -> None:
-        """Show document list with items."""
+        """Show document list with isolated click zones."""
         list_items: list[ft.Control] = []
+
         for doc in documents:
-            # Determine icon based on file type
             icon_name = ft.Icons.PICTURE_AS_PDF if doc.file_type == "pdf" else ft.Icons.DESCRIPTION
 
-            # Create document row
+            # ZONE 1: The Toggle Area (Left Side)
+            toggle_area = ft.Container(
+                content=ft.Row([
+                    ft.Icon(icon_name, color=COLORS["text_secondary"], size=24),
+                    ft.Container(width=12),
+                    ft.Column([
+                        ft.Text(doc.filename, color=COLORS["text_primary"], size=TYPOGRAPHY["body"]["size"], max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                        ft.Text(f"{doc.word_count} words • {doc.token_count} tokens", color=COLORS["text_secondary"], size=TYPOGRAPHY["micro"]["size"]),
+                    ], spacing=4, expand=True),
+                ]),
+                expand=True,
+                # Clicking anywhere in this left zone toggles the document
+                on_click=lambda e, d=doc: self._on_document_click(e, d),
+            )
+
+            # ZONE 2: The Delete Button (Right Side)
+            delete_btn = ft.IconButton(
+                icon=ft.Icons.DELETE_OUTLINE,
+                icon_color=COLORS["text_muted"],
+                icon_size=20,
+                tooltip="Delete Document",
+                # Clicking this explicitly calls our simplified delete method
+                on_click=lambda e, d=doc: self._on_document_delete(e, d),
+            )
+
+            # Assemble the row
             row = ft.Container(
-                content=ft.Row(
-                    [
-                        # Left side: click area for toggle-active
+                content=ft.Row([
+                    toggle_area,
+                    ft.Row([
+                        # Status Dot
                         ft.Container(
-                            content=ft.Row(
-                                [
-                                    ft.Icon(
-                                        icon=icon_name,
-                                        color=COLORS["text_secondary"],
-                                        size=24,
-                                    ),
-                                    ft.Container(width=12),
-                                    ft.Column(
-                                        [
-                                            ft.Text(
-                                                doc.filename,
-                                                color=COLORS["text_primary"],
-                                                size=TYPOGRAPHY["body"]["size"],
-                                                max_lines=1,
-                                                overflow=ft.TextOverflow.ELLIPSIS,
-                                            ),
-                                            ft.Text(
-                                                f"{doc.word_count} words • {doc.token_count} tokens",
-                                                color=COLORS["text_secondary"],
-                                                size=TYPOGRAPHY["micro"]["size"],
-                                            ),
-                                        ],
-                                        spacing=4,
-                                        expand=True,
-                                    ),
-                                ],
-                            ),
-                            expand=True,
-                            on_click=lambda e, d=doc: self._on_document_click(e, d),
+                            width=8, height=8, border_radius=4,
+                            bgcolor=COLORS["accent_electric"] if doc.is_active else ft.Colors.TRANSPARENT,
                         ),
-                        # Right side: status dot + delete button (isolated from toggle click)
-                        ft.Row(
-                            [
-                                ft.Container(
-                                    width=8,
-                                    height=8,
-                                    bgcolor=(
-                                        COLORS["accent_electric"]
-                                        if doc.is_active
-                                        else COLORS["border_hairline"]
-                                    ),
-                                    border_radius=4,
-                                    visible=doc.is_active,
-                                ),
-                                ft.Container(
-                                    content=ft.IconButton(
-                                        icon=ft.Icons.DELETE_OUTLINE,
-                                        icon_color=COLORS["text_muted"],
-                                        icon_size=20,
-                                        tooltip="Delete Document",
-                                        on_click=lambda e, d=doc: self._on_document_delete(e, d),
-                                    ),
-                                    padding=ft.Padding(left=4, right=4, top=4, bottom=4),
-                                ),
-                            ],
-                            alignment=ft.MainAxisAlignment.END,
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        ),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                ),
+                        delete_btn
+                    ], alignment=ft.MainAxisAlignment.END)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 padding=ft.Padding(left=12, right=4, top=8, bottom=8),
                 bgcolor=COLORS["bg_active"] if doc.is_active else COLORS["bg_obsidian"],
-                border=ft.Border(
-                    left=(
-                        ft.BorderSide(3, COLORS["accent_electric"])
-                        if doc.is_active
-                        else ft.BorderSide(0, ft.Colors.TRANSPARENT)
-                    ),
-                    bottom=ft.BorderSide(1, COLORS["border_hairline"]),
-                ),
+                data={"is_active": doc.is_active},  # Pass state to hover handler
                 on_hover=self._on_document_hover,
             )
             list_items.append(row)
 
+        # Update the UI efficiently
         self.document_list.controls = list_items
         self.controls = [
             self.header,
@@ -378,42 +349,73 @@ class VaultPanel(ft.Column):
         """Handle document row hover."""
         if not isinstance(e.control, ft.Container):
             return
+        # Preserve active state background on hover out
+        is_active = e.control.data.get("is_active", False) if e.control.data else False
         if e.data == "true":
             e.control.bgcolor = COLORS["bg_hover"]
         else:
-            e.control.bgcolor = COLORS["bg_obsidian"]
+            e.control.bgcolor = COLORS["bg_active"] if is_active else COLORS["bg_obsidian"]
         e.control.update()
 
     def _on_document_click(self, e: Any, doc: Any) -> None:
         """Handle document click to toggle active state."""
-
-        def toggle_worker() -> None:
-            try:
-                new_active = not doc.is_active
-                self.vault_manager.toggle_active(doc.id, new_active)
-                self._load_documents()
-            except VaultError:
-                logger.error("Failed to toggle document active state", exc_info=True)
-                self._show_error("Failed to update document")
-
-        self._page.run_thread(toggle_worker)
+        try:
+            new_active = not doc.is_active
+            self.vault_manager.toggle_active(doc.id, new_active)
+            # Update AppState to notify observers
+            app_state.toggle_document_active(doc.id)
+            # Reload documents to update UI
+            self._load_documents()
+        except VaultError:
+            logger.error("Failed to toggle document active state", exc_info=True)
+            self._show_error("Failed to update document")
 
     def _on_document_delete(self, e: Any, doc: Any) -> None:
-        """Delete a document from the vault."""
-        logger.info("Delete button clicked", extra={"doc_id": doc.id, "filename": doc.filename})
+        """Handle document deletion with confirmation dialog."""
 
-        def delete_worker() -> None:
+        def handle_confirm(ev: Any) -> None:
+            # Close the dialog first
+            dialog.open = False
+            self._page.update()
+
+            # Perform the deletion
             try:
-                logger.info("Starting document deletion", extra={"doc_id": doc.id})
                 self.vault_manager.delete_document(doc.id)
-                self._load_documents()
+                app_state.remove_document(doc.id)
                 self._show_success(f"Deleted: {doc.filename}")
-                logger.info("Document deleted successfully", extra={"doc_id": doc.id})
-            except Exception:
-                logger.error("Failed to delete document", exc_info=True, extra={"doc_id": doc.id})
+                self._load_documents()  # Refresh the UI
+            except Exception as ex:
+                logger.error(f"Failed to delete {doc.filename}", exc_info=True)
                 self._show_error("Failed to delete document")
 
-        self._page.run_thread(delete_worker)
+        def handle_cancel(ev: Any) -> None:
+            # Just close the dialog, do nothing else
+            dialog.open = False
+            self._page.update()
+
+        # Create the dialog on the fly
+        dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text("Delete Document"),
+            content=ft.Text(
+                f"Are you sure you want to delete '{doc.filename}'?",
+                color=COLORS["text_primary"]
+            ),
+            actions=[
+                ft.TextButton("Cancel", on_click=handle_cancel),
+                ft.TextButton(
+                    "Delete",
+                    on_click=handle_confirm,
+                    style=ft.ButtonStyle(color=COLORS["accent_error"])
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        # Add dialog to overlay and open it (Flet 0.85.x imperative API)
+        self._page.overlay.append(dialog)
+        dialog.open = True
+        self._page.update()
 
     async def _on_upload_click(self, e: Any) -> None:
         """Handle upload button click."""
@@ -435,11 +437,25 @@ class VaultPanel(ft.Column):
                 self._show_info("Uploading document...")
 
                 # Upload document
-                self.vault_manager.upload_document(file_path)
+                metadata = self.vault_manager.upload_document(file_path)
 
-                # Show success and reload
+                # Update AppState to notify observers
+                app_state.add_document({
+                    "id": metadata.id,
+                    "filename": metadata.filename,
+                    "original_path": metadata.original_path,
+                    "storage_path": metadata.storage_path,
+                    "file_type": metadata.file_type,
+                    "file_size_bytes": metadata.file_size_bytes,
+                    "word_count": metadata.word_count,
+                    "token_count": metadata.token_count,
+                    "extracted_text": metadata.extracted_text,
+                    "is_active": metadata.is_active,
+                    "created_at": metadata.created_at,
+                })
+
+                # Show success
                 self._show_success(f"Uploaded: {file_path.name}")
-                self._load_documents()
 
             except UnsupportedFileTypeError as e:
                 self._show_error(e.message)
@@ -462,13 +478,12 @@ class VaultPanel(ft.Column):
         self.toast_container.controls.append(toast)
         self.toast_container.update()
 
-        # Define a task to run after delay
-        def auto_dismiss() -> None:
-            import time
-            time.sleep(4)
+        # Schedule auto-dismiss using async task (UI-thread safe)
+        async def auto_dismiss() -> None:
+            await asyncio.sleep(4)
             self._remove_toast(toast)
 
-        self._page.run_thread(auto_dismiss)
+        self._page.run_task(auto_dismiss)
 
     def _remove_toast(self, toast: ToastNotification) -> None:
         """Remove a toast notification."""

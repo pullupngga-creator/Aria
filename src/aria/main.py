@@ -133,14 +133,18 @@ def main(page: ft.Page) -> None:
             title=ft.Text("Initialization Error"),
             content=ft.Text(e.message),
         )
-        page.show_dialog(error_dialog)
+        page.overlay.append(error_dialog)
+        error_dialog.open = True
+        page.update()
     except Exception as e:
         logger.error(f"Unexpected error during initialization: {e}", exc_info=True)
         error_dialog = ft.AlertDialog(
             title=ft.Text("Unexpected Error"),
             content=ft.Text(f"An unexpected error occurred: {e}"),
         )
-        page.show_dialog(error_dialog)
+        page.overlay.append(error_dialog)
+        error_dialog.open = True
+        page.update()
 
 
 if __name__ == "__main__":

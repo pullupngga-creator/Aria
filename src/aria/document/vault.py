@@ -109,35 +109,38 @@ class VaultManager:
 
             # Insert into database
             conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO documents (
-                    id, filename, original_path, storage_path, file_type,
-                    file_size_bytes, word_count, token_count, extracted_text, is_active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    doc_id,
-                    file_path.name,
-                    str(file_path),
-                    str(storage_path),
-                    file_type,
-                    file_size_bytes,
-                    word_count,
-                    token_count,
-                    extracted_text_preview,
-                    0,  # is_active defaults to 0
-                ),
-            )
-            conn.commit()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO documents (
+                        id, filename, original_path, storage_path, file_type,
+                        file_size_bytes, word_count, token_count, extracted_text, is_active
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        doc_id,
+                        file_path.name,
+                        str(file_path),
+                        str(storage_path),
+                        file_type,
+                        file_size_bytes,
+                        word_count,
+                        token_count,
+                        extracted_text_preview,
+                        0,  # is_active defaults to 0
+                    ),
+                )
+                conn.commit()
 
-            # Update FTS index
-            cursor.execute(
-                "INSERT INTO documents_fts(rowid, filename, extracted_text) VALUES (?, ?, ?)",
-                (cursor.lastrowid, file_path.name, extracted_text_preview or ""),
-            )
-            conn.commit()
+                # Update FTS index
+                cursor.execute(
+                    "INSERT INTO documents_fts(rowid, filename, extracted_text) VALUES (?, ?, ?)",
+                    (cursor.lastrowid, file_path.name, extracted_text_preview or ""),
+                )
+                conn.commit()
+            finally:
+                conn.close()
 
             logger.info(
                 "Document uploaded successfully",
@@ -177,19 +180,63 @@ class VaultManager:
             List of DocumentMetadata for all documents
         """
         conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id, filename, original_path, storage_path, file_type,
-                   file_size_bytes, word_count, token_count, extracted_text,
-                   is_active, created_at
-            FROM documents
-            ORDER BY created_at DESC
-            """
-        )
-        rows = cursor.fetchall()
-        return [
-            DocumentMetadata(
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, filename, original_path, storage_path, file_type,
+                       file_size_bytes, word_count, token_count, extracted_text,
+                       is_active, created_at
+                FROM documents
+                ORDER BY created_at DESC
+                """
+            )
+            rows = cursor.fetchall()
+            return [
+                DocumentMetadata(
+                    id=row["id"],
+                    filename=row["filename"],
+                    original_path=row["original_path"],
+                    storage_path=row["storage_path"],
+                    file_type=row["file_type"],
+                    file_size_bytes=row["file_size_bytes"],
+                    word_count=row["word_count"],
+                    token_count=row["token_count"],
+                    extracted_text=row["extracted_text"],
+                    is_active=bool(int(row["is_active"] or 0)),
+                    created_at=row["created_at"],
+                )
+                for row in rows
+            ]
+        finally:
+            conn.close()
+
+    def get_document(self, doc_id: str) -> DocumentMetadata | None:
+        """Retrieve a single document by ID.
+        
+        Args:
+            doc_id: UUID of the document
+            
+        Returns:
+            DocumentMetadata if found, None otherwise
+        """
+        conn = get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, filename, original_path, storage_path, file_type,
+                       file_size_bytes, word_count, token_count, extracted_text,
+                       is_active, created_at
+                FROM documents
+                WHERE id = ?
+                """,
+                (doc_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            return DocumentMetadata(
                 id=row["id"],
                 filename=row["filename"],
                 original_path=row["original_path"],
@@ -202,46 +249,8 @@ class VaultManager:
                 is_active=bool(int(row["is_active"] or 0)),
                 created_at=row["created_at"],
             )
-            for row in rows
-        ]
-
-    def get_document(self, doc_id: str) -> DocumentMetadata | None:
-        """Retrieve a single document by ID.
-        
-        Args:
-            doc_id: UUID of the document
-            
-        Returns:
-            DocumentMetadata if found, None otherwise
-        """
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            SELECT id, filename, original_path, storage_path, file_type,
-                   file_size_bytes, word_count, token_count, extracted_text,
-                   is_active, created_at
-            FROM documents
-            WHERE id = ?
-            """,
-            (doc_id,),
-        )
-        row = cursor.fetchone()
-        if row is None:
-            return None
-        return DocumentMetadata(
-            id=row["id"],
-            filename=row["filename"],
-            original_path=row["original_path"],
-            storage_path=row["storage_path"],
-            file_type=row["file_type"],
-            file_size_bytes=row["file_size_bytes"],
-            word_count=row["word_count"],
-            token_count=row["token_count"],
-            extracted_text=row["extracted_text"],
-            is_active=bool(int(row["is_active"] or 0)),
-            created_at=row["created_at"],
-        )
+        finally:
+            conn.close()
 
     def delete_document(self, doc_id: str) -> None:
         """Delete a document from the vault (database and file storage).
@@ -253,25 +262,40 @@ class VaultManager:
             VaultError: If document not found or deletion fails
         """
         try:
-            conn = get_connection()
-            cursor = conn.cursor()
-
-            # Get storage path before deletion
-            cursor.execute("SELECT storage_path FROM documents WHERE id = ?", (doc_id,))
-            row = cursor.fetchone()
-            if row is None:
+            # Get document metadata before deletion
+            doc = self.get_document(doc_id)
+            if doc is None:
                 raise VaultError(f"Document not found: {doc_id}")
 
-            storage_path = Path(row["storage_path"])
+            storage_path = Path(doc.storage_path)
 
-            # Delete from database (CASCADE will handle FTS)
-            cursor.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
-            conn.commit()
-
-            # Delete file from storage
+            # Delete file from storage FIRST (can be recovered if DB fails)
             if storage_path.exists():
                 storage_path.unlink()
 
+            # Delete from database and clean FTS index
+            conn = get_connection()
+            try:
+                cursor = conn.cursor()
+
+                # Get the rowid for FTS cleanup
+                cursor.execute("SELECT rowid FROM documents WHERE id = ?", (doc_id,))
+                row = cursor.fetchone()
+
+                if row:
+                    rowid = row["rowid"]
+                    # Remove from FTS index explicitly (CASCADE doesn't apply to FTS5)
+                    cursor.execute(
+                        "INSERT INTO documents_fts(documents_fts, rowid, filename, extracted_text) "
+                        "VALUES('delete', ?, ?, ?)",
+                        (rowid, doc.filename, doc.extracted_text or "")
+                    )
+                    # Delete the document record
+                    cursor.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+
+                conn.commit()
+            finally:
+                conn.close()
             logger.info("Document deleted", extra={"doc_id": doc_id})
 
         except VaultError:
@@ -292,12 +316,15 @@ class VaultManager:
         """
         try:
             conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "UPDATE documents SET is_active = ? WHERE id = ?",
-                (1 if is_active else 0, doc_id),
-            )
-            conn.commit()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE documents SET is_active = ? WHERE id = ?",
+                    (1 if is_active else 0, doc_id),
+                )
+                conn.commit()
+            finally:
+                conn.close()
             logger.info(
                 "Document active state toggled",
                 extra={"doc_id": doc_id, "is_active": is_active},
