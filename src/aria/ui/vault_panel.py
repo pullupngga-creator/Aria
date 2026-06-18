@@ -405,6 +405,29 @@ class VaultPanel(ft.Column):
             item.on_hover = lambda e, i=item: i.on_hover(e)
             list_items.append(item)
 
+<<<<<<< HEAD
+=======
+            # Assemble the row
+            row = ft.Container(
+                content=ft.Row([
+                    toggle_area,
+                    ft.Row([
+                        # Status Dot
+                        ft.Container(
+                            width=8, height=8, border_radius=4,
+                            bgcolor=COLORS["accent_electric"] if doc.is_active else ft.Colors.TRANSPARENT,
+                        ),
+                    ], alignment=ft.MainAxisAlignment.END)
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                padding=ft.Padding(left=12, right=4, top=8, bottom=8),
+                bgcolor=COLORS["bg_active"] if doc.is_active else COLORS["bg_obsidian"],
+                data={"is_active": doc.is_active},  # Pass state to hover handler
+                on_hover=self._on_document_hover,
+            )
+            list_items.append(row)
+
+        # Update the UI efficiently
+>>>>>>> 16da978 (feat(chat): implement AI chat with Gemini integration and persistence)
         self.document_list.controls = list_items
         self.controls = [
             self.header,
@@ -446,6 +469,7 @@ class VaultPanel(ft.Column):
             logger.error(f"Unexpected error toggling document: {e}", exc_info=True)
             self._show_error("Failed to update document")
 
+<<<<<<< HEAD
     def _handle_document_delete(self, doc_id: str, filename: str) -> None:
         """Show delete confirmation dialog."""
 
@@ -504,6 +528,8 @@ class VaultPanel(ft.Column):
         dialog.open = True
         self._page.update()
 
+=======
+>>>>>>> 16da978 (feat(chat): implement AI chat with Gemini integration and persistence)
     async def _on_upload_click(self, e: Any) -> None:
         """Handle upload button click."""
         try:

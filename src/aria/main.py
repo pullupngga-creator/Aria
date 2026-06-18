@@ -14,12 +14,14 @@ if parent_dir not in sys.path:
 
 from typing import Any
 
+from aria.api.gemini import GeminiClient
 from aria.config import settings
 from aria.db import init_db
 from aria.exceptions import AriaError
 from aria.state import app_state
 from aria.ui.app import TwoPanelShell
-from aria.ui.theme import COLORS, TYPOGRAPHY, build_theme
+from aria.ui.chat_panel import ChatPanel
+from aria.ui.theme import COLORS, build_theme
 from aria.ui.vault_panel import VaultPanel
 
 # Configure logging
@@ -66,57 +68,14 @@ def main(page: ft.Page) -> None:
         vault_panel = VaultPanel(page=page, on_collapse_toggle=_on_toggle)
 
         # ── Chat panel (right) ────────────────────────────────────────────────
-        #   Header row: expand button (visible only when sidebar is collapsed) + title
-        expand_btn = ft.IconButton(
-            icon=ft.Icons.KEYBOARD_DOUBLE_ARROW_RIGHT_ROUNDED,
-            icon_color=COLORS["text_muted"],
-            icon_size=18,
-            tooltip="Expand sidebar",
-            visible=app_state.vault_collapsed,
-            on_click=_on_toggle,
-        )
+        def _llm_factory() -> GeminiClient:
+            """Lazy factory: creates GeminiClient only when first message is sent."""
+            return GeminiClient(api_key=settings.gemini_api_key or "")
 
-        def _sync_expand_btn() -> None:
-            expand_btn.visible = app_state.vault_collapsed
-            expand_btn.update()
-
-        app_state.add_observer("vault_collapsed_changed", _sync_expand_btn)
-
-        chat_header = ft.Container(
-            content=ft.Row(
-                controls=[
-                    expand_btn,
-                    ft.Text(
-                        "AI Chat Canvas",
-                        size=TYPOGRAPHY["h1"]["size"],
-                        weight=ft.FontWeight.BOLD,
-                        color=COLORS["text_primary"],
-                    ),
-                ],
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=4,
-            ),
-            padding=ft.Padding(left=8, right=16, top=12, bottom=12),
-            border=ft.Border(bottom=ft.BorderSide(1, COLORS["border_hairline"])),
-        )
-
-        chat_panel = ft.Column(
-            controls=[
-                chat_header,
-                ft.Container(
-                    content=ft.Text(
-                        "Welcome to Aria",
-                        size=TYPOGRAPHY["display"]["size"],
-                        weight=ft.FontWeight.BOLD,
-                        color=COLORS["text_primary"],
-                    ),
-                    alignment=ft.Alignment(0, -0.7),
-                    expand=True,
-                    padding=48,
-                ),
-            ],
-            spacing=0,
-            expand=True,
+        chat_panel = ChatPanel(
+            page=page,
+            on_collapse_toggle=_on_toggle,
+            llm_client_factory=_llm_factory,
         )
 
         # Create two-panel shell

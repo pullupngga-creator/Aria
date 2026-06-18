@@ -27,6 +27,7 @@ class AppState:
         # Chat state
         self.current_conversation_id: str | None = None
         self.messages: list[dict[str, Any]] = []
+        self.is_sending: bool = False
 
         # UI state
         self.vault_panel_width: float = 320.0
@@ -101,6 +102,26 @@ class AppState:
         """Toggle the vault sidebar collapsed state."""
         self.vault_collapsed = not self.vault_collapsed
         self._notify_observers("vault_collapsed_changed")
+
+    def set_sending(self, value: bool) -> None:
+        """Set the API call in-progress flag and notify observers."""
+        self.is_sending = value
+        self._notify_observers("sending_state_changed")
+
+    def set_current_conversation(self, conversation_id: str | None) -> None:
+        """Switch to a different conversation (or None for a fresh start).
+
+        Clears the in-memory message list and notifies observers.
+        """
+        self.current_conversation_id = conversation_id
+        self.messages = []
+        self._notify_observers("conversation_changed")
+        self._notify_observers("messages_changed")
+
+    def load_messages(self, messages: list[dict[str, Any]]) -> None:
+        """Replace the in-memory message list (e.g., after loading from DB)."""
+        self.messages = messages
+        self._notify_observers("messages_changed")
 
 
 # Global state instance
