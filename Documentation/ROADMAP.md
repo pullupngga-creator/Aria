@@ -12,9 +12,9 @@
 - [x] Basic text extraction with `pymupdf`
 - [x] Vault list rendering with file metadata
 - [x] Source activation toggle (click to bind/unbind)
-- [ ] Chat input bar with send functionality
-- [ ] Integration with one LLM provider (Gemini) — non-streaming
-- [ ] Conversation persistence to SQLite
+- [x] Chat input bar with send functionality
+- [x] Integration with one LLM provider (Gemini) — non-streaming
+- [x] Conversation persistence to SQLite
 
 **Deliverable**: "Aria Alpha" — internal testing, single-user, single-provider
 

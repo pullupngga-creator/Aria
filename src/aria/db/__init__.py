@@ -2,12 +2,12 @@
 
 import logging
 
-from aria.db.connection import db_path, get_connection
+from aria.db.connection import db_path, get_async_connection, get_connection
 from aria.db.migrations import init_schema
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["init_db", "get_connection"]
+__all__ = ["init_db", "get_connection", "get_async_connection"]
 
 
 def init_db() -> None:

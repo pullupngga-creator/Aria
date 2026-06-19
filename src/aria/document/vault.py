@@ -1,11 +1,15 @@
-"""Vault management for document storage and metadata."""
+"""Vault management for document storage and metadata (async)."""
 
+import asyncio
 import logging
 import uuid
 from pathlib import Path
 from typing import NamedTuple
 
-from aria.db.connection import get_connection
+import aiofiles
+import aiosqlite
+
+from aria.db.connection import get_async_connection
 from aria.document.parser import extract_pdf, extract_txt
 from aria.document.tokenizer import count_tokens, count_words
 from aria.exceptions import FileSizeExceededError, UnsupportedFileTypeError, VaultError
@@ -45,10 +49,10 @@ class VaultManager:
 
     def validate_file(self, file_path: Path) -> None:
         """Validate file type and size before upload.
-        
+
         Args:
             file_path: Path to the file to validate
-            
+
         Raises:
             UnsupportedFileTypeError: If file type is not PDF or TXT
             FileSizeExceededError: If file exceeds 50MB limit
@@ -68,22 +72,22 @@ class VaultManager:
                 f"File size ({size_mb:.1f}MB) exceeds 50MB limit."
             )
 
-    def upload_document(self, file_path: Path) -> DocumentMetadata:
+    async def upload_document(self, file_path: Path) -> DocumentMetadata:
         """Upload a document to the vault: validate, copy, parse, and store metadata.
-        
+
         Args:
             file_path: Path to the file to upload
-            
+
         Returns:
             DocumentMetadata with all extracted information
-            
+
         Raises:
             UnsupportedFileTypeError: If file type is not supported
             FileSizeExceededError: If file exceeds size limit
             VaultError: If upload or database operations fail
         """
         try:
-            # Validate file
+            # Validate file (sync, CPU-only check)
             self.validate_file(file_path)
 
             # Generate unique storage path
@@ -91,15 +95,16 @@ class VaultManager:
             storage_filename = f"doc_{doc_id}.txt"
             storage_path = _VAULT_DIR / storage_filename
 
-            # Extract text based on file type
+            # Extract text in a background thread (pymupdf is CPU-bound)
             file_type = file_path.suffix.lower().lstrip(".")
             if file_type == "pdf":
-                extracted_text = extract_pdf(file_path)
+                extracted_text = await asyncio.to_thread(extract_pdf, file_path)
             else:  # txt
-                extracted_text = extract_txt(file_path)
+                extracted_text = await asyncio.to_thread(extract_txt, file_path)
 
-            # Store extracted text as UTF-8 .txt file
-            storage_path.write_text(extracted_text, encoding="utf-8")
+            # Store extracted text as UTF-8 .txt file (async I/O)
+            async with aiofiles.open(storage_path, "w", encoding="utf-8") as f:
+                await f.write(extracted_text)
 
             # Calculate metadata
             word_count = count_words(extracted_text)
@@ -107,11 +112,10 @@ class VaultManager:
             file_size_bytes = file_path.stat().st_size
             extracted_text_preview = extracted_text[:500] if extracted_text else None
 
-            # Insert into database
-            conn = get_connection()
+            # Insert into database (async)
+            db = await get_async_connection()
             try:
-                cursor = conn.cursor()
-                cursor.execute(
+                cursor = await db.execute(
                     """
                     INSERT INTO documents (
                         id, filename, original_path, storage_path, file_type,
@@ -131,16 +135,16 @@ class VaultManager:
                         0,  # is_active defaults to 0
                     ),
                 )
-                conn.commit()
+                await db.commit()
 
                 # Update FTS index
-                cursor.execute(
+                await db.execute(
                     "INSERT INTO documents_fts(rowid, filename, extracted_text) VALUES (?, ?, ?)",
                     (cursor.lastrowid, file_path.name, extracted_text_preview or ""),
                 )
-                conn.commit()
+                await db.commit()
             finally:
-                conn.close()
+                await db.close()
 
             logger.info(
                 "Document uploaded successfully",
@@ -173,16 +177,15 @@ class VaultManager:
             logger.error("Failed to upload document", extra={"path": str(file_path)})
             raise VaultError(f"Failed to upload document: {file_path}") from e
 
-    def get_all_documents(self) -> list[DocumentMetadata]:
+    async def get_all_documents(self) -> list[DocumentMetadata]:
         """Retrieve all documents from the vault.
-        
+
         Returns:
             List of DocumentMetadata for all documents
         """
-        conn = get_connection()
+        db = await get_async_connection()
         try:
-            cursor = conn.cursor()
-            cursor.execute(
+            cursor = await db.execute(
                 """
                 SELECT id, filename, original_path, storage_path, file_type,
                        file_size_bytes, word_count, token_count, extracted_text,
@@ -191,7 +194,7 @@ class VaultManager:
                 ORDER BY created_at DESC
                 """
             )
-            rows = cursor.fetchall()
+            rows = await cursor.fetchall()
             return [
                 DocumentMetadata(
                     id=row["id"],
@@ -209,21 +212,20 @@ class VaultManager:
                 for row in rows
             ]
         finally:
-            conn.close()
+            await db.close()
 
-    def get_document(self, doc_id: str) -> DocumentMetadata | None:
+    async def get_document(self, doc_id: str) -> DocumentMetadata | None:
         """Retrieve a single document by ID.
-        
+
         Args:
             doc_id: UUID of the document
-            
+
         Returns:
             DocumentMetadata if found, None otherwise
         """
-        conn = get_connection()
+        db = await get_async_connection()
         try:
-            cursor = conn.cursor()
-            cursor.execute(
+            cursor = await db.execute(
                 """
                 SELECT id, filename, original_path, storage_path, file_type,
                        file_size_bytes, word_count, token_count, extracted_text,
@@ -233,7 +235,7 @@ class VaultManager:
                 """,
                 (doc_id,),
             )
-            row = cursor.fetchone()
+            row = await cursor.fetchone()
             if row is None:
                 return None
             return DocumentMetadata(
@@ -250,20 +252,20 @@ class VaultManager:
                 created_at=row["created_at"],
             )
         finally:
-            conn.close()
+            await db.close()
 
-    def delete_document(self, doc_id: str) -> None:
+    async def delete_document(self, doc_id: str) -> None:
         """Delete a document from the vault (database and file storage).
-        
+
         Args:
             doc_id: UUID of the document to delete
-            
+
         Raises:
             VaultError: If document not found or deletion fails
         """
         try:
             # Get document metadata before deletion
-            doc = self.get_document(doc_id)
+            doc = await self.get_document(doc_id)
             if doc is None:
                 raise VaultError(f"Document not found: {doc_id}")
 
@@ -274,28 +276,28 @@ class VaultManager:
                 storage_path.unlink()
 
             # Delete from database and clean FTS index
-            conn = get_connection()
+            db = await get_async_connection()
             try:
-                cursor = conn.cursor()
-
                 # Get the rowid for FTS cleanup
-                cursor.execute("SELECT rowid FROM documents WHERE id = ?", (doc_id,))
-                row = cursor.fetchone()
+                cursor = await db.execute(
+                    "SELECT rowid FROM documents WHERE id = ?", (doc_id,)
+                )
+                row = await cursor.fetchone()
 
                 if row:
                     rowid = row["rowid"]
                     # Remove from FTS index explicitly (CASCADE doesn't apply to FTS5)
-                    cursor.execute(
+                    await db.execute(
                         "INSERT INTO documents_fts(documents_fts, rowid, filename, extracted_text) "
                         "VALUES('delete', ?, ?, ?)",
-                        (rowid, doc.filename, doc.extracted_text or "")
+                        (rowid, doc.filename, doc.extracted_text or ""),
                     )
                     # Delete the document record
-                    cursor.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+                    await db.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
 
-                conn.commit()
+                await db.commit()
             finally:
-                conn.close()
+                await db.close()
             logger.info("Document deleted", extra={"doc_id": doc_id})
 
         except VaultError:
@@ -304,27 +306,26 @@ class VaultManager:
             logger.error("Failed to delete document", extra={"doc_id": doc_id})
             raise VaultError(f"Failed to delete document: {doc_id}") from e
 
-    def toggle_active(self, doc_id: str, is_active: bool) -> None:
+    async def toggle_active(self, doc_id: str, is_active: bool) -> None:
         """Toggle a document's active state for context binding.
-        
+
         Args:
             doc_id: UUID of the document
             is_active: New active state
-            
+
         Raises:
             VaultError: If document not found or update fails
         """
         try:
-            conn = get_connection()
+            db = await get_async_connection()
             try:
-                cursor = conn.cursor()
-                cursor.execute(
+                await db.execute(
                     "UPDATE documents SET is_active = ? WHERE id = ?",
                     (1 if is_active else 0, doc_id),
                 )
-                conn.commit()
+                await db.commit()
             finally:
-                conn.close()
+                await db.close()
             logger.info(
                 "Document active state toggled",
                 extra={"doc_id": doc_id, "is_active": is_active},

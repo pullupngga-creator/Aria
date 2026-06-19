@@ -15,6 +15,7 @@ if parent_dir not in sys.path:
 from typing import Any
 
 from aria.api.gemini import GeminiClient
+from aria.chat import history as chat_history
 from aria.config import settings
 from aria.db import init_db
 from aria.exceptions import AriaError
@@ -32,11 +33,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def main(page: ft.Page) -> None:
+async def main(page: ft.Page) -> None:
     """Initialize and run the Aria application."""
 
     try:
-        # Initialise database on first launch (idempotent)
+        # Initialise database on first launch (idempotent — sync, one-time)
         init_db()
 
         # Page configuration
@@ -59,6 +60,21 @@ def main(page: ft.Page) -> None:
         page.padding = 0
 
         logger.info(f"Initializing {settings.app_name} v{settings.app_version}")
+
+        # ── Load persisted conversations (async) ──────────────────────────
+        conversations = await chat_history.get_conversations()
+        app_state.load_conversations(conversations)
+
+        # Auto-select the most recently updated conversation (if any)
+        if conversations:
+            latest = conversations[0]  # get_conversations() orders by updated_at DESC
+            latest_id: str = str(latest["id"])
+            messages = await chat_history.get_messages(latest_id)
+            app_state.set_current_conversation(latest_id)
+            app_state.load_messages(messages)
+            logger.info(
+                "Restored conversation %s with %d message(s)", latest_id, len(messages)
+            )
 
         # ── Collapse toggle callback ──────────────────────────────────────────
         def _on_toggle(e: Any) -> None:

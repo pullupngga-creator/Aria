@@ -1,8 +1,9 @@
-"""AI Chat Canvas panel with message list and send orchestration."""
+"""AI Chat Canvas panel with message list and send orchestration (async)."""
 
 import asyncio
 import logging
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,9 @@ _SYSTEM_PROMPT_BASE = (
     "Be concise, accurate, and cite sources when referencing provided documents."
 )
 
+# Maximum characters to use when auto-titling a conversation from the first user message.
+_AUTO_TITLE_MAX_CHARS: int = 40
+
 
 class ChatPanel(ft.Column):
     """Right-hand chat canvas: header + scrollable messages + input bar.
@@ -43,7 +47,7 @@ class ChatPanel(ft.Column):
         """Initialize the chat panel.
 
         Args:
-            page: The Flet page (used for run_thread and run_task).
+            page: The Flet page (used for run_task).
             on_collapse_toggle: Callback to toggle the vault sidebar.
             llm_client_factory: Callable that returns a fresh LLMClient instance.
                                 Called lazily on first send to defer key validation.
@@ -69,6 +73,21 @@ class ChatPanel(ft.Column):
             on_click=self._on_collapse_toggle,
         )
 
+        # Conversation switcher dropdown
+        self._conversation_dropdown = ft.Dropdown(
+            expand=True,
+            hint_text="Select a conversation",
+            text_size=TYPOGRAPHY["body"]["size"],
+            color=COLORS["text_primary"],
+            bgcolor=COLORS["bg_elevated"],
+            border_color=COLORS["border_subtle"],
+            focused_border_color=COLORS["border_focus"],
+            border_radius=6,
+            content_padding=ft.Padding(left=10, right=10, top=6, bottom=6),
+            height=36,
+            on_select=self._on_conversation_selected,
+        )
+
         self._header = ft.Container(
             content=ft.Row(
                 controls=[
@@ -79,7 +98,9 @@ class ChatPanel(ft.Column):
                         weight=ft.FontWeight.BOLD,
                         color=COLORS["text_primary"],
                     ),
-                    ft.Container(expand=True),
+                    ft.Container(width=12),
+                    self._conversation_dropdown,
+                    ft.Container(width=4),
                     ft.IconButton(
                         icon=ft.Icons.ADD_COMMENT_OUTLINED,
                         icon_color=COLORS["text_secondary"],
@@ -165,11 +186,10 @@ class ChatPanel(ft.Column):
         )
 
         # ── Input bar ───────────────────────────────────────────────────────────
-        self._input_bar = InputBar(on_send=self._handle_send)
+        # InputBar takes a sync callback; we bridge to async via _on_send_callback.
+        self._input_bar = InputBar(on_send=self._on_send_callback)
 
         # ── Assemble main content ───────────────────────────────────────────────
-        # Use a Column (not Stack) so expand is properly distributed:
-        #   header (fixed) → content_area (expands) → input_bar (fixed)
         self._content_area = ft.Stack(
             [
                 ft.Column(
@@ -195,8 +215,13 @@ class ChatPanel(ft.Column):
         app_state.add_observer("vault_collapsed_changed", self._sync_expand_btn)
         app_state.add_observer("messages_changed", self._rebuild_messages)
         app_state.add_observer("sending_state_changed", self._on_sending_state_changed)
+        app_state.add_observer("conversations_changed", self._rebuild_conversation_dropdown)
+        app_state.add_observer("conversation_changed", self._sync_dropdown_selection)
 
-    # ── Observer callbacks ──────────────────────────────────────────────────────
+        # Initial dropdown population (conversations may already be loaded from startup)
+        self._rebuild_conversation_dropdown()
+
+    # ── Observer callbacks (sync — invoked by AppState on the UI thread) ────────
 
     def _sync_expand_btn(self) -> None:
         """Show/hide expand button based on vault collapse state."""
@@ -231,109 +256,184 @@ class ChatPanel(ft.Column):
         self._loading_indicator.update()
         self._input_bar.update()
 
-    # ── Chat actions ────────────────────────────────────────────────────────────
+    def _rebuild_conversation_dropdown(self) -> None:
+        """Rebuild dropdown options from app_state.conversations."""
+        options: list[ft.dropdown.Option] = []
+        for conv in app_state.conversations:
+            conv_id = str(conv.get("id", ""))
+            title = str(conv.get("title", "New Chat"))
+            options.append(ft.dropdown.Option(key=conv_id, text=title))
 
-    def _on_new_chat(self, e: Any) -> None:
+        self._conversation_dropdown.options = options
+        # Sync current selection
+        self._conversation_dropdown.value = app_state.current_conversation_id or ""
+        try:
+            self._conversation_dropdown.update()
+        except (AssertionError, RuntimeError):
+            # Control not yet mounted on the page; safe to ignore during init.
+            pass
+
+    def _sync_dropdown_selection(self) -> None:
+        """Sync the dropdown value when current_conversation_id changes externally."""
+        self._conversation_dropdown.value = app_state.current_conversation_id or ""
+        try:
+            self._conversation_dropdown.update()
+        except (AssertionError, RuntimeError):
+            pass
+
+    # ── Chat actions (async — run on Flet's event loop) ─────────────────────────
+
+    def _on_send_callback(self, text: str) -> None:
+        """Sync bridge from InputBar to async send handler.
+
+        InputBar fires this synchronously from on_submit / on_click.
+        We schedule the async handler on Flet's event loop.
+        """
+        self._page.run_task(lambda: self._handle_send(text))
+
+    async def _on_new_chat(self, e: Any) -> None:
         """Start a new conversation, clearing current messages."""
         app_state.set_current_conversation(None)
+        # Dropdown selection is cleared via the conversation_changed observer
+
+    async def _on_conversation_selected(self, e: Any) -> None:
+        """Handle selection change in the conversation dropdown."""
+        selected_id: str | None = self._conversation_dropdown.value or None
+        if not selected_id:
+            return
+        if selected_id == app_state.current_conversation_id:
+            return  # Already viewing this conversation
+
+        await self._switch_conversation(selected_id)
+
+    async def _switch_conversation(self, conversation_id: str) -> None:
+        """Load a different conversation from the database into the UI."""
+        try:
+            messages = await chat_history.get_messages(conversation_id)
+            app_state.set_current_conversation(conversation_id)
+            app_state.load_messages(messages)
+            logger.info(
+                "Switched to conversation %s (%d messages)",
+                conversation_id,
+                len(messages),
+            )
+        except Exception:
+            logger.error("Failed to switch conversation", exc_info=True)
+            self._show_error("Failed to load conversation. Please try again.")
 
     # ── Send flow ───────────────────────────────────────────────────────────────
 
-    def _handle_send(self, text: str) -> None:
+    async def _handle_send(self, text: str) -> None:
         """Handle a send action from the InputBar.
 
-        Runs the full send flow (DB write + API call) in a background thread
-        to keep the UI responsive.
+        Runs the full send flow (DB write + API call) as native async code
+        on Flet's event loop, keeping the UI responsive via aiosqlite and
+        the async Gemini client.
         """
         if app_state.is_sending:
             return
         if not text.strip():
             return
 
-        def send_worker() -> None:
-            """Background worker: persist message, call LLM, persist response."""
-            try:
-                app_state.set_sending(True)
+        try:
+            app_state.set_sending(True)
 
-                # Create conversation on first message
-                if app_state.current_conversation_id is None:
-                    conv_id = chat_history.create_conversation(
-                        model_provider="gemini",
-                        model_name="gemini-1.5-pro",
-                    )
-                    app_state.current_conversation_id = conv_id
-
-                conv_id = app_state.current_conversation_id
-                assert conv_id is not None  # Guaranteed by create above
-
-                # Save user message to DB
-                msg_id = chat_history.save_message(
-                    conversation_id=conv_id,
-                    role="user",
-                    content=text,
-                    token_count=len(text.split()),  # rough estimate
-                )
-
-                # Add to in-memory state (triggers UI rebuild)
-                app_state.add_message({
-                    "id": msg_id,
-                    "role": "user",
-                    "content": text,
-                    "created_at": "",
-                })
-
-                # Build system prompt with active sources
-                system_prompt = self._build_system_prompt()
-
-                # Build message history for API
-                api_messages = [
-                    {"role": m["role"], "content": m["content"]}
-                    for m in app_state.messages
-                    if m.get("role") in ("user", "assistant")
-                ]
-
-                # Lazy-init LLM client
-                if self._llm_client is None:
-                    self._llm_client = self._llm_client_factory()
-
-                # Call the LLM (synchronous call wrapped in asyncio.run for the thread)
-                response_text = asyncio.run(
-                    self._llm_client.send_message(api_messages, system_prompt)
-                )
-
-                if not response_text:
-                    response_text = "No response generated."
-
-                # Save assistant message to DB
-                asst_id = chat_history.save_message(
-                    conversation_id=conv_id,
-                    role="assistant",
-                    content=response_text,
-                    token_count=len(response_text.split()),
+            # Create conversation on first message
+            if app_state.current_conversation_id is None:
+                conv_id = await chat_history.create_conversation(
                     model_provider="gemini",
                     model_name="gemini-1.5-pro",
                 )
-
-                # Add to in-memory state (triggers UI rebuild)
-                app_state.add_message({
-                    "id": asst_id,
-                    "role": "assistant",
-                    "content": response_text,
-                    "created_at": "",
+                app_state.current_conversation_id = conv_id
+                # Add to in-memory list so it appears in the dropdown
+                app_state.add_conversation({
+                    "id": conv_id,
+                    "title": "New Chat",
+                    "model_provider": "gemini",
+                    "model_name": "gemini-1.5-pro",
+                    "system_prompt": None,
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                    "is_archived": False,
                 })
 
-            except APIError as e:
-                logger.error("API error during send", exc_info=True)
-                self._show_error(e.message)
-            except Exception:
-                logger.error("Unexpected error during send", exc_info=True)
-                self._show_error("An unexpected error occurred. Please try again.")
-            finally:
-                app_state.set_sending(False)
+            conv_id = app_state.current_conversation_id
+            assert conv_id is not None  # Guaranteed by create above
 
-        self._page.run_thread(send_worker)
+            # Save user message to DB (returns id + timestamp)
+            msg_id, msg_ts = await chat_history.save_message(
+                conversation_id=conv_id,
+                role="user",
+                content=text,
+                token_count=len(text.split()),  # rough estimate
+            )
 
-    def _build_system_prompt(self) -> str:
+            # Add to in-memory state (triggers UI rebuild)
+            app_state.add_message({
+                "id": msg_id,
+                "role": "user",
+                "content": text,
+                "created_at": msg_ts,
+            })
+
+            # Build system prompt with active sources
+            system_prompt = await self._build_system_prompt()
+
+            # Build message history for API
+            api_messages = [
+                {"role": m["role"], "content": m["content"]}
+                for m in app_state.messages
+                if m.get("role") in ("user", "assistant")
+            ]
+
+            # Lazy-init LLM client
+            if self._llm_client is None:
+                self._llm_client = self._llm_client_factory()
+
+            # Call the LLM (native async, no asyncio.run needed)
+            response_text = await self._llm_client.send_message(api_messages, system_prompt)
+
+            if not response_text:
+                response_text = "No response generated."
+
+            # Save assistant message to DB (returns id + timestamp)
+            asst_id, asst_ts = await chat_history.save_message(
+                conversation_id=conv_id,
+                role="assistant",
+                content=response_text,
+                token_count=len(response_text.split()),
+                model_provider="gemini",
+                model_name="gemini-1.5-pro",
+            )
+
+            # Add to in-memory state (triggers UI rebuild)
+            app_state.add_message({
+                "id": asst_id,
+                "role": "assistant",
+                "content": response_text,
+                "created_at": asst_ts,
+            })
+
+            # ── Auto-title: derive a title from the first user message ──
+            # Only re-title if the conversation still has the default name.
+            conv = await chat_history.get_conversation(conv_id)
+            if conv and conv.get("title") == "New Chat":
+                auto_title = text[:_AUTO_TITLE_MAX_CHARS].strip()
+                if len(text) > _AUTO_TITLE_MAX_CHARS:
+                    auto_title += "…"
+                await chat_history.update_conversation_title(conv_id, auto_title)
+                app_state.update_conversation_title(conv_id, auto_title)
+
+        except APIError as e:
+            logger.error("API error during send", exc_info=True)
+            self._show_error(e.message)
+        except Exception:
+            logger.error("Unexpected error during send", exc_info=True)
+            self._show_error("An unexpected error occurred. Please try again.")
+        finally:
+            app_state.set_sending(False)
+
+    async def _build_system_prompt(self) -> str:
         """Build the system prompt, injecting active source document text."""
         active_ids = app_state.active_document_ids
         if not active_ids:
@@ -341,12 +441,13 @@ class ChatPanel(ft.Column):
 
         source_sections: list[str] = []
         for doc_id in active_ids:
-            doc = self._vault_manager.get_document(doc_id)
+            doc = await self._vault_manager.get_document(doc_id)
             if doc is None:
                 continue
             storage_path = Path(doc.storage_path)
             try:
-                text = storage_path.read_text(encoding="utf-8")
+                # Read file content in a thread to avoid blocking the event loop
+                text = await asyncio.to_thread(storage_path.read_text, encoding="utf-8")
                 # Truncate very long documents to ~8000 chars to avoid context overflow
                 if len(text) > 8000:
                     text = text[:8000] + "\n... [truncated]"
@@ -380,7 +481,7 @@ class ChatPanel(ft.Column):
             await asyncio.sleep(4)
             self._remove_toast(toast)
 
-        self._page.run_task(auto_dismiss)
+        self._page.run_task(lambda: auto_dismiss())
 
     def _remove_toast(self, toast: ToastNotification) -> None:
         """Remove a toast from the panel."""

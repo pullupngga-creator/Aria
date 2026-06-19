@@ -1,16 +1,17 @@
-"""SQLite CRUD operations for conversations and messages."""
+"""SQLite CRUD operations for conversations and messages (async)."""
 
 import logging
-import sqlite3
 import uuid
 from datetime import UTC, datetime
 
-from aria.db.connection import get_connection
+import aiosqlite
+
+from aria.db.connection import get_async_connection
 
 logger = logging.getLogger(__name__)
 
 
-def create_conversation(
+async def create_conversation(
     model_provider: str,
     model_name: str,
     title: str = "New Chat",
@@ -30,10 +31,9 @@ def create_conversation(
     conversation_id = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()
 
-    conn = get_connection()
+    db = await get_async_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(
+        await db.execute(
             """
             INSERT INTO conversations (
                 id, title, model_provider, model_name,
@@ -42,17 +42,17 @@ def create_conversation(
             """,
             (conversation_id, title, model_provider, model_name, system_prompt, now, now),
         )
-        conn.commit()
+        await db.commit()
         logger.info("Conversation created", extra={"conversation_id": conversation_id})
         return conversation_id
-    except sqlite3.Error:
+    except aiosqlite.Error:
         logger.error("Failed to create conversation", exc_info=True)
         raise
     finally:
-        conn.close()
+        await db.close()
 
 
-def save_message(
+async def save_message(
     conversation_id: str,
     role: str,
     content: str,
@@ -60,7 +60,7 @@ def save_message(
     token_count: int = 0,
     model_provider: str | None = None,
     model_name: str | None = None,
-) -> str:
+) -> tuple[str, str]:
     """Save a message to a conversation.
 
     Also updates the conversation's updated_at timestamp.
@@ -75,15 +75,14 @@ def save_message(
         model_name: Model used for this response (assistant only).
 
     Returns:
-        UUID of the newly created message.
+        Tuple of (message_id, created_at) for the newly created message.
     """
     message_id = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()
 
-    conn = get_connection()
+    db = await get_async_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(
+        await db.execute(
             """
             INSERT INTO messages (
                 id, conversation_id, role, content, sources_used,
@@ -103,24 +102,24 @@ def save_message(
             ),
         )
         # Update conversation timestamp
-        cursor.execute(
+        await db.execute(
             "UPDATE conversations SET updated_at = ? WHERE id = ?",
             (now, conversation_id),
         )
-        conn.commit()
+        await db.commit()
         logger.info(
             "Message saved",
             extra={"message_id": message_id, "role": role, "conversation_id": conversation_id},
         )
-        return message_id
-    except sqlite3.Error:
+        return message_id, now
+    except aiosqlite.Error:
         logger.error("Failed to save message", exc_info=True)
         raise
     finally:
-        conn.close()
+        await db.close()
 
 
-def get_messages(conversation_id: str) -> list[dict[str, str | int | None]]:
+async def get_messages(conversation_id: str) -> list[dict[str, str | int | None]]:
     """Retrieve all messages for a conversation, ordered chronologically.
 
     Args:
@@ -129,10 +128,9 @@ def get_messages(conversation_id: str) -> list[dict[str, str | int | None]]:
     Returns:
         List of message dicts with all columns.
     """
-    conn = get_connection()
+    db = await get_async_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(
+        cursor = await db.execute(
             """
             SELECT id, conversation_id, role, content, sources_used,
                    token_count, model_provider, model_name, created_at
@@ -142,7 +140,7 @@ def get_messages(conversation_id: str) -> list[dict[str, str | int | None]]:
             """,
             (conversation_id,),
         )
-        rows = cursor.fetchall()
+        rows = await cursor.fetchall()
         return [
             {
                 "id": row["id"],
@@ -158,19 +156,18 @@ def get_messages(conversation_id: str) -> list[dict[str, str | int | None]]:
             for row in rows
         ]
     finally:
-        conn.close()
+        await db.close()
 
 
-def get_conversations() -> list[dict[str, str | int | None]]:
+async def get_conversations() -> list[dict[str, str | int | None]]:
     """Retrieve all non-archived conversations, most recently updated first.
 
     Returns:
         List of conversation dicts with all columns.
     """
-    conn = get_connection()
+    db = await get_async_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(
+        cursor = await db.execute(
             """
             SELECT id, title, model_provider, model_name, system_prompt,
                    created_at, updated_at, is_archived
@@ -179,7 +176,7 @@ def get_conversations() -> list[dict[str, str | int | None]]:
             ORDER BY updated_at DESC
             """
         )
-        rows = cursor.fetchall()
+        rows = await cursor.fetchall()
         return [
             {
                 "id": row["id"],
@@ -194,40 +191,75 @@ def get_conversations() -> list[dict[str, str | int | None]]:
             for row in rows
         ]
     finally:
-        conn.close()
+        await db.close()
 
 
-def update_conversation_title(conversation_id: str, title: str) -> None:
+async def update_conversation_title(conversation_id: str, title: str) -> None:
     """Update the title of a conversation.
 
     Args:
         conversation_id: UUID of the conversation.
         title: New title text.
     """
-    conn = get_connection()
+    db = await get_async_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute(
+        await db.execute(
             "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
             (title, datetime.now(UTC).isoformat(), conversation_id),
         )
-        conn.commit()
+        await db.commit()
         logger.info("Conversation title updated", extra={"conversation_id": conversation_id})
     finally:
-        conn.close()
+        await db.close()
 
 
-def delete_conversation(conversation_id: str) -> None:
+async def get_conversation(conversation_id: str) -> dict[str, str | int | None] | None:
+    """Retrieve a single conversation by its ID.
+
+    Args:
+        conversation_id: UUID of the conversation.
+
+    Returns:
+        Conversation dict with all columns, or None if not found.
+    """
+    db = await get_async_connection()
+    try:
+        cursor = await db.execute(
+            """
+            SELECT id, title, model_provider, model_name, system_prompt,
+                   created_at, updated_at, is_archived
+            FROM conversations
+            WHERE id = ?
+            """,
+            (conversation_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "title": row["title"],
+            "model_provider": row["model_provider"],
+            "model_name": row["model_name"],
+            "system_prompt": row["system_prompt"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "is_archived": bool(int(row["is_archived"] or 0)),
+        }
+    finally:
+        await db.close()
+
+
+async def delete_conversation(conversation_id: str) -> None:
     """Delete a conversation and all its messages (via CASCADE).
 
     Args:
         conversation_id: UUID of the conversation to delete.
     """
-    conn = get_connection()
+    db = await get_async_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
-        conn.commit()
+        await db.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+        await db.commit()
         logger.info("Conversation deleted", extra={"conversation_id": conversation_id})
     finally:
-        conn.close()
+        await db.close()

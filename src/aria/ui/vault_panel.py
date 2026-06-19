@@ -1,4 +1,4 @@
-"""Sources Vault panel component with document upload and list."""
+"""Sources Vault panel component with document upload, list, and drag-and-drop."""
 
 import asyncio
 import logging
@@ -95,13 +95,11 @@ class DocumentListItem(ft.Container):
         self,
         doc: Any,
         on_toggle: Callable[[str], None],
-        on_delete: Callable[[str, str], None],
     ) -> None:
         """Initialize document list item."""
         super().__init__()
         self.doc = doc
-        self.on_toggle = on_toggle
-        self.on_delete = on_delete
+        self._on_toggle = on_toggle
 
         # Determine icon
         icon_name = (
@@ -152,29 +150,17 @@ class DocumentListItem(ft.Container):
             bgcolor=COLORS["accent_electric"] if doc.is_active else ft.Colors.TRANSPARENT,
         )
 
-        self.delete_btn = ft.IconButton(
-            icon=ft.Icons.DELETE_OUTLINE,
-            icon_color=COLORS["text_muted"],
-            icon_size=20,
-            tooltip="Delete Document",
-        )
-
         # Main container styling
-        self.padding = ft.Padding(left=12, right=4, top=8, bottom=8)
+        self.padding = ft.Padding(left=12, right=12, top=8, bottom=8)
         self.bgcolor = COLORS["bg_active"] if doc.is_active else COLORS["bg_obsidian"]
         self.data = {"is_active": doc.is_active, "doc_id": doc.id}
+        # Wire on_hover internally (avoids external callback reassignment anti-pattern)
+        self.on_hover = self._on_hover
 
         self.content = ft.Row(
             [
                 self.toggle_btn,
-                ft.Row(
-                    [
-                        self.status_indicator,
-                        self.delete_btn,
-                    ],
-                    alignment=ft.MainAxisAlignment.END,
-                    spacing=0,
-                ),
+                self.status_indicator,
             ],
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
         )
@@ -182,18 +168,13 @@ class DocumentListItem(ft.Container):
     def did_mount(self) -> None:
         """Attach event handlers after widget is mounted."""
         self.toggle_btn.on_click = lambda e: self._handle_toggle()
-        self.delete_btn.on_click = lambda e: self._handle_delete()
 
     def _handle_toggle(self) -> None:
         """Handle toggle active state."""
-        self.on_toggle(self.doc.id)
+        self._on_toggle(self.doc.id)
 
-    def _handle_delete(self) -> None:
-        """Handle delete document."""
-        self.on_delete(self.doc.id, self.doc.filename)
-
-    def on_hover(self, e: Any) -> None:
-        """Handle hover state."""
+    def _on_hover(self, e: Any) -> None:
+        """Handle hover state — wired internally in the constructor."""
         is_active = self.data.get("is_active", False)
         if e.data == "true":  # Hovering
             self.bgcolor = COLORS["bg_hover"]
@@ -203,14 +184,15 @@ class DocumentListItem(ft.Container):
 
 
 class UploadZone(ft.Container):
-    """Upload zone for documents (button click)."""
+    """Upload zone for documents (button click + drag-and-drop target)."""
 
     def __init__(self, on_upload_click: Callable[[Any], Any]) -> None:
         """Initialize upload zone."""
         super().__init__()
 
         self.bgcolor = COLORS["bg_obsidian"]
-        border_side = ft.BorderSide(2, COLORS["border_hairline"])
+        self._default_border_color = COLORS["border_hairline"]
+        border_side = ft.BorderSide(2, self._default_border_color)
         self.border = ft.Border(
             top=border_side,
             right=border_side,
@@ -221,6 +203,12 @@ class UploadZone(ft.Container):
         self.padding = 32
         self.alignment = ft.Alignment(0, 0)
         self.expand = True
+
+        self._hint_text = ft.Text(
+            "PDF and TXT files only (max 50MB)",
+            color=COLORS["text_secondary"],
+            size=TYPOGRAPHY["small"]["size"],
+        )
 
         self.content = ft.Column(
             [
@@ -237,11 +225,7 @@ class UploadZone(ft.Container):
                     weight=ft.FontWeight.W_500,
                 ),
                 ft.Container(height=8),
-                ft.Text(
-                    "PDF and TXT files only (max 50MB)",
-                    color=COLORS["text_secondary"],
-                    size=TYPOGRAPHY["small"]["size"],
-                ),
+                self._hint_text,
                 ft.Container(height=24),
                 ft.ElevatedButton(
                     "Browse Files",
@@ -254,6 +238,21 @@ class UploadZone(ft.Container):
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             alignment=ft.MainAxisAlignment.CENTER,
         )
+
+    def set_drag_highlight(self, active: bool) -> None:
+        """Toggle visual highlight when files are dragged over the zone."""
+        color = COLORS["accent_electric"] if active else self._default_border_color
+        border_side = ft.BorderSide(2, color)
+        self.border = ft.Border(
+            top=border_side,
+            right=border_side,
+            bottom=border_side,
+            left=border_side,
+        )
+        self._hint_text.value = (
+            "Drop files here…" if active else "PDF and TXT files only (max 50MB)"
+        )
+        self.update()
 
 
 class VaultPanel(ft.Column):
@@ -353,20 +352,31 @@ class VaultPanel(ft.Column):
 
     def did_mount(self) -> None:
         """Called when the control is added to the page."""
-        # Register FilePicker as a page service
+        # Register FilePicker as a page service (correct for Flet >= 0.85)
         self._page.services.append(self.file_picker)
 
-        # Set up state observers
-        app_state.add_observer("documents_changed", self._load_documents)
-        app_state.add_observer("active_documents_changed", self._load_documents)
-        
-        # Load initial documents
-        self._load_documents()
+        # Set up state observers — sync wrappers that schedule async work
+        app_state.add_observer("documents_changed", self._schedule_load_documents)
+        app_state.add_observer("active_documents_changed", self._schedule_load_documents)
 
-    def _load_documents(self) -> None:
+        # Register page-level drag-and-drop handlers
+        self._page.on_drag_enter = self._on_drag_enter
+        self._page.on_drag_leave = self._on_drag_leave
+        self._page.on_drop = self._on_drop
+
+        # Load initial documents (schedule on event loop)
+        self._page.run_task(self._load_documents)
+
+    def _schedule_load_documents(self) -> None:
+        """Sync observer callback — schedules async document reload."""
+        self._page.run_task(self._load_documents)
+
+    # ── Async document operations ───────────────────────────────────────────────
+
+    async def _load_documents(self) -> None:
         """Load and display documents from vault."""
         try:
-            documents = self.vault_manager.get_all_documents()
+            documents = await self.vault_manager.get_all_documents()
             if documents:
                 self._show_document_list(documents)
             else:
@@ -399,10 +409,8 @@ class VaultPanel(ft.Column):
         for doc in documents:
             item = DocumentListItem(
                 doc=doc,
-                on_toggle=self._handle_document_toggle,
-                on_delete=self._handle_document_delete,
+                on_toggle=self._on_document_toggle_callback,
             )
-            item.on_hover = lambda e, i=item: i.on_hover(e)
             list_items.append(item)
 
         self.document_list.controls = list_items
@@ -421,88 +429,32 @@ class VaultPanel(ft.Column):
         ]
         self.update()
 
-    def _handle_document_toggle(self, doc_id: str) -> None:
+    def _on_document_toggle_callback(self, doc_id: str) -> None:
+        """Sync bridge — schedules async toggle on the event loop."""
+        self._page.run_task(lambda: self._handle_document_toggle(doc_id))
+
+    async def _handle_document_toggle(self, doc_id: str) -> None:
         """Toggle document active state."""
         try:
             # Get the document to check current state
-            doc = self.vault_manager.get_document(doc_id)
+            doc = await self.vault_manager.get_document(doc_id)
             if doc is None:
                 self._show_error("Document not found")
                 return
 
             # Toggle the active state in database
             new_active = not doc.is_active
-            self.vault_manager.toggle_active(doc_id, new_active)
+            await self.vault_manager.toggle_active(doc_id, new_active)
 
-            # Update app state
+            # Update app state (triggers observer → reload)
             app_state.toggle_document_active(doc_id)
 
-            # Reload UI
-            self._load_documents()
         except VaultError as e:
             logger.error(f"Failed to toggle document: {e}", exc_info=True)
             self._show_error("Failed to update document")
         except Exception as e:
             logger.error(f"Unexpected error toggling document: {e}", exc_info=True)
             self._show_error("Failed to update document")
-
-    def _handle_document_delete(self, doc_id: str, filename: str) -> None:
-        """Show delete confirmation dialog."""
-
-        def handle_confirm(e: Any) -> None:
-            """Confirm and delete the document."""
-            dialog.open = False
-            
-            try:
-                # Delete from vault
-                self.vault_manager.delete_document(doc_id)
-                
-                # Update app state
-                app_state.remove_document(doc_id)
-                
-                # Show success message
-                self._show_success(f"Deleted: {filename}")
-                
-                # Reload UI
-                self._load_documents()
-            except VaultError as ex:
-                logger.error(f"Failed to delete document: {ex}", exc_info=True)
-                self._show_error("Failed to delete document")
-            except Exception as ex:
-                logger.error(f"Unexpected error deleting document: {ex}", exc_info=True)
-                self._show_error("Failed to delete document")
-            finally:
-                # Update page
-                self._page.update()
-
-        def handle_cancel(e: Any) -> None:
-            """Cancel deletion."""
-            dialog.open = False
-            self._page.update()
-
-        # Create confirmation dialog
-        dialog = ft.AlertDialog(
-            modal=True,
-            title=ft.Text("Delete Document"),
-            content=ft.Text(
-                f"Are you sure you want to delete '{filename}'?",
-                color=COLORS["text_primary"],
-            ),
-            actions=[
-                ft.TextButton("Cancel", on_click=handle_cancel),
-                ft.TextButton(
-                    "Delete",
-                    on_click=handle_confirm,
-                    style=ft.ButtonStyle(color=COLORS["accent_error"]),
-                ),
-            ],
-            actions_alignment=ft.MainAxisAlignment.END,
-        )
-
-        # Show dialog
-        self._page.overlay.append(dialog)
-        dialog.open = True
-        self._page.update()
 
     async def _on_upload_click(self, e: Any) -> None:
         """Handle upload button click."""
@@ -513,53 +465,73 @@ class VaultPanel(ft.Column):
             )
             if files and files[0].path:
                 file_path = Path(files[0].path)
-                self._handle_upload(file_path)
+                await self._handle_upload(file_path)
         except Exception as ex:
             logger.error(f"Error picking file: {ex}", exc_info=True)
             self._show_error("Failed to open file picker")
 
-    def _handle_upload(self, file_path: Path) -> None:
-        """Handle file upload in background thread."""
+    async def _handle_upload(self, file_path: Path) -> None:
+        """Handle file upload asynchronously (no background thread needed)."""
+        try:
+            self._show_info("Uploading document...")
 
-        def upload_worker() -> None:
-            """Perform upload in background."""
-            try:
-                self._show_info("Uploading document...")
+            # Upload the document (async DB + async file I/O)
+            metadata = await self.vault_manager.upload_document(file_path)
 
-                # Upload the document
-                metadata = self.vault_manager.upload_document(file_path)
+            # Update app state (triggers observer → reload)
+            app_state.add_document({
+                "id": metadata.id,
+                "filename": metadata.filename,
+                "original_path": metadata.original_path,
+                "storage_path": metadata.storage_path,
+                "file_type": metadata.file_type,
+                "file_size_bytes": metadata.file_size_bytes,
+                "word_count": metadata.word_count,
+                "token_count": metadata.token_count,
+                "extracted_text": metadata.extracted_text,
+                "is_active": metadata.is_active,
+                "created_at": metadata.created_at,
+            })
 
-                # Update app state
-                app_state.add_document({
-                    "id": metadata.id,
-                    "filename": metadata.filename,
-                    "original_path": metadata.original_path,
-                    "storage_path": metadata.storage_path,
-                    "file_type": metadata.file_type,
-                    "file_size_bytes": metadata.file_size_bytes,
-                    "word_count": metadata.word_count,
-                    "token_count": metadata.token_count,
-                    "extracted_text": metadata.extracted_text,
-                    "is_active": metadata.is_active,
-                    "created_at": metadata.created_at,
-                })
+            # Show success
+            self._show_success(f"Uploaded: {file_path.name}")
 
-                # Show success
-                self._show_success(f"Uploaded: {file_path.name}")
+        except UnsupportedFileTypeError as e:
+            self._show_error(e.message)
+        except FileSizeExceededError as e:
+            self._show_error(e.message)
+        except VaultError as e:
+            logger.error(f"Vault error during upload: {e}", exc_info=True)
+            self._show_error(e.message)
+        except Exception as ex:
+            logger.error(f"Unexpected error during upload: {ex}", exc_info=True)
+            self._show_error("Failed to upload document")
 
-            except UnsupportedFileTypeError as e:
-                self._show_error(e.message)
-            except FileSizeExceededError as e:
-                self._show_error(e.message)
-            except VaultError as e:
-                logger.error(f"Vault error during upload: {e}", exc_info=True)
-                self._show_error(e.message)
-            except Exception as ex:
-                logger.error(f"Unexpected error during upload: {ex}", exc_info=True)
-                self._show_error("Failed to upload document")
+    # ── Drag-and-drop handlers ──────────────────────────────────────────────────
 
-        # Run in background
-        self._page.run_thread(upload_worker)
+    async def _on_drag_enter(self, e: Any) -> None:
+        """Highlight the upload zone when files are dragged over the window."""
+        self.upload_zone.set_drag_highlight(True)
+
+    async def _on_drag_leave(self, e: Any) -> None:
+        """Remove highlight when the drag leaves the window."""
+        self.upload_zone.set_drag_highlight(False)
+
+    async def _on_drop(self, e: Any) -> None:
+        """Process files dropped onto the window."""
+        self.upload_zone.set_drag_highlight(False)
+        # e.files contains a list of dropped file objects
+        files = e.files if hasattr(e, "files") else []
+        if not files:
+            return
+        for dropped_file in files:
+            file_path_str = getattr(dropped_file, "path", None) or getattr(
+                dropped_file, "name", None
+            )
+            if file_path_str:
+                await self._handle_upload(Path(file_path_str))
+
+    # ── Toast helpers ───────────────────────────────────────────────────────────
 
     def _show_toast(self, toast: ToastNotification) -> None:
         """Show a toast notification."""
@@ -573,7 +545,7 @@ class VaultPanel(ft.Column):
             await asyncio.sleep(4)
             self._remove_toast(toast)
 
-        self._page.run_task(auto_dismiss)
+        self._page.run_task(lambda: auto_dismiss())
 
     def _remove_toast(self, toast: ToastNotification) -> None:
         """Remove a toast notification."""

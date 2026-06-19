@@ -27,6 +27,7 @@ class AppState:
         # Chat state
         self.current_conversation_id: str | None = None
         self.messages: list[dict[str, Any]] = []
+        self.conversations: list[dict[str, Any]] = []
         self.is_sending: bool = False
 
         # UI state
@@ -107,6 +108,24 @@ class AppState:
         """Set the API call in-progress flag and notify observers."""
         self.is_sending = value
         self._notify_observers("sending_state_changed")
+
+    def load_conversations(self, conversations: list[dict[str, Any]]) -> None:
+        """Replace the in-memory conversation list (e.g., after loading from DB)."""
+        self.conversations = conversations
+        self._notify_observers("conversations_changed")
+
+    def add_conversation(self, conversation: dict[str, Any]) -> None:
+        """Insert a conversation at the top of the in-memory list."""
+        self.conversations.insert(0, conversation)
+        self._notify_observers("conversations_changed")
+
+    def update_conversation_title(self, conversation_id: str, title: str) -> None:
+        """Update a conversation's title in the in-memory list."""
+        for conv in self.conversations:
+            if conv.get("id") == conversation_id:
+                conv["title"] = title
+                break
+        self._notify_observers("conversations_changed")
 
     def set_current_conversation(self, conversation_id: str | None) -> None:
         """Switch to a different conversation (or None for a fresh start).
