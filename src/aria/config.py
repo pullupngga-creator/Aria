@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     max_file_size_mb: int = 50
     supported_extensions: list[str] = [".pdf", ".txt", ".docx", ".csv", ".xlsx", ".md"]
 
+    # Context Engine Settings
+    context_token_limit: int = 128_000     # max tokens for the context window
+    reserved_response_tokens: int = 8_192  # tokens reserved for model response
+    per_document_token_cap: int = 16_000   # hard cap per source document
+
     @classmethod
     def settings_customise_sources(
         cls,

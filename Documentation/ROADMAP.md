@@ -24,7 +24,7 @@
 **Goal**: Context-aware conversations with @-mention system
 
 ### Milestones
-- [ ] @-mention parser and inline dropdown (fuzzy search, keyboard nav)
+- [x] @-mention parser and inline dropdown (fuzzy search, keyboard nav)
 - [ ] Context injection engine (system prompt builder + source text assembly)
 - [ ] Token budget management (count, display, enforce limits)
 - [ ] Streaming response rendering (token-by-token display)

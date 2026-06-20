@@ -4,29 +4,25 @@ import asyncio
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 import flet as ft
 
 from aria.api.base import LLMClient
 from aria.chat import history as chat_history
+from aria.config import settings
+from aria.context.injector import ContextInjector
+from aria.context.mention import search_documents
 from aria.document.vault import VaultManager
 from aria.exceptions import APIError
 from aria.state import app_state
 from aria.ui.input_bar import InputBar
+from aria.ui.mention_dropdown import MentionDropdown
 from aria.ui.message_bubble import LoadingIndicator, MessageBubble
 from aria.ui.theme import COLORS, TYPOGRAPHY
 from aria.ui.vault_panel import ToastNotification
 
 logger = logging.getLogger(__name__)
-
-# System prompt template
-_SYSTEM_PROMPT_BASE = (
-    "You are Aria, a knowledgeable research assistant. "
-    "You help users analyze documents, answer questions, and think critically. "
-    "Be concise, accurate, and cite sources when referencing provided documents."
-)
 
 # Maximum characters to use when auto-titling a conversation from the first user message.
 _AUTO_TITLE_MAX_CHARS: int = 40
@@ -58,6 +54,12 @@ class ChatPanel(ft.Column):
         self._llm_client_factory = llm_client_factory
         self._llm_client: LLMClient | None = None
         self._vault_manager = VaultManager()
+        self._context_injector = ContextInjector(
+            self._vault_manager,
+            context_limit=settings.context_token_limit,
+            reserved_for_response=settings.reserved_response_tokens,
+            per_document_cap=settings.per_document_token_cap,
+        )
         self.toasts: list[ToastNotification] = []
 
         self.expand = True
@@ -185,11 +187,23 @@ class ChatPanel(ft.Column):
             padding=ft.Padding(left=16, top=16, right=16, bottom=16),
         )
 
+        # ── Mention dropdown (hosted in the content Stack, not InputBar) ────────
+        self._mention_dropdown = MentionDropdown(
+            on_select=self._on_mention_selected,
+            on_dismiss=self._on_mention_dismissed,
+        )
+
         # ── Input bar ───────────────────────────────────────────────────────────
-        # InputBar takes a sync callback; we bridge to async via _on_send_callback.
-        self._input_bar = InputBar(on_send=self._on_send_callback)
+        # InputBar takes sync callbacks; we bridge to async where needed.
+        self._input_bar = InputBar(
+            on_send=self._on_send_callback,
+            on_mention_trigger=self._on_mention_trigger,
+            on_mention_dismiss=self._on_mention_dismiss,
+        )
 
         # ── Assemble main content ───────────────────────────────────────────────
+        # MentionDropdown is positioned at the bottom of the Stack so it floats
+        # just above the InputBar without being clipped by the window edge.
         self._content_area = ft.Stack(
             [
                 ft.Column(
@@ -201,6 +215,7 @@ class ChatPanel(ft.Column):
                     expand=True,
                 ),
                 self._toast_stack,
+                self._mention_dropdown,
             ],
             expand=True,
         )
@@ -281,6 +296,63 @@ class ChatPanel(ft.Column):
         except (AssertionError, RuntimeError):
             pass
 
+    # ── @-Mention handlers (sync — called by InputBar / page keyboard) ──────────
+
+    def _on_mention_trigger(self, query: str) -> None:
+        """Called by InputBar whenever an active @-mention is detected.
+
+        Opens the mention dropdown with fuzzy-searched vault documents and
+        registers a page-level keyboard handler for arrow-key navigation.
+        """
+        results = search_documents(query, app_state.documents)
+        self._mention_dropdown.show(results, query)
+        # Gate InputBar submit so Enter selects from the dropdown
+        self._input_bar.is_mention_dropdown_open = self._mention_dropdown.is_visible
+        # Register page-level keyboard handler for navigation
+        self._page.on_keyboard_event = self._on_mention_key
+
+    def _on_mention_dismiss(self) -> None:
+        """Called by InputBar when the @-mention trigger ends."""
+        self._mention_dropdown.hide()
+        self._input_bar.is_mention_dropdown_open = False
+        self._page.on_keyboard_event = None
+
+    def _on_mention_key(self, e: Any) -> None:
+        """Handle keyboard navigation when the mention dropdown is open.
+
+        Intercepts arrow keys, Enter, and Escape; suppresses them so they
+        don't propagate to the TextField.
+        """
+        key = getattr(e, "key", None) or ""
+        if key == "ArrowUp":
+            self._mention_dropdown.navigate(-1)
+            if hasattr(e, "prevent_default"):
+                e.prevent_default = True
+        elif key == "ArrowDown":
+            self._mention_dropdown.navigate(1)
+            if hasattr(e, "prevent_default"):
+                e.prevent_default = True
+        elif key == "Enter":
+            self._mention_dropdown.select_current()
+            if hasattr(e, "prevent_default"):
+                e.prevent_default = True
+        elif key == "Escape":
+            self._mention_dropdown.dismiss()
+            if hasattr(e, "prevent_default"):
+                e.prevent_default = True
+
+    def _on_mention_selected(self, document: dict[str, Any]) -> None:
+        """Called when the user picks a document from the dropdown."""
+        self._input_bar.add_mention(document)
+        self._mention_dropdown.hide()
+        self._input_bar.is_mention_dropdown_open = False
+        self._page.on_keyboard_event = None
+
+    def _on_mention_dismissed(self) -> None:
+        """Called by MentionDropdown.on_dismiss (Escape / empty results)."""
+        self._input_bar.is_mention_dropdown_open = False
+        self._page.on_keyboard_event = None
+
     # ── Chat actions (async — run on Flet's event loop) ─────────────────────────
 
     def _on_send_callback(self, text: str) -> None:
@@ -289,7 +361,7 @@ class ChatPanel(ft.Column):
         InputBar fires this synchronously from on_submit / on_click.
         We schedule the async handler on Flet's event loop.
         """
-        self._page.run_task(lambda: self._handle_send(text))
+        asyncio.create_task(self._handle_send(text))
 
     async def _on_new_chat(self, e: Any) -> None:
         """Start a new conversation, clearing current messages."""
@@ -376,8 +448,13 @@ class ChatPanel(ft.Column):
                 "created_at": msg_ts,
             })
 
-            # Build system prompt with active sources
-            system_prompt = await self._build_system_prompt()
+            # Build system prompt with active sources + @-mentioned sources
+            mentioned_ids = self._input_bar.mentioned_document_ids
+            system_prompt = await self._context_injector.build(
+                active_ids=app_state.active_document_ids,
+                mentioned_ids=set(mentioned_ids) if mentioned_ids else None,
+                user_message=text,
+            )
 
             # Build message history for API
             api_messages = [
@@ -433,41 +510,6 @@ class ChatPanel(ft.Column):
         finally:
             app_state.set_sending(False)
 
-    async def _build_system_prompt(self) -> str:
-        """Build the system prompt, injecting active source document text."""
-        active_ids = app_state.active_document_ids
-        if not active_ids:
-            return _SYSTEM_PROMPT_BASE
-
-        source_sections: list[str] = []
-        for doc_id in active_ids:
-            doc = await self._vault_manager.get_document(doc_id)
-            if doc is None:
-                continue
-            storage_path = Path(doc.storage_path)
-            try:
-                # Read file content in a thread to avoid blocking the event loop
-                text = await asyncio.to_thread(storage_path.read_text, encoding="utf-8")
-                # Truncate very long documents to ~8000 chars to avoid context overflow
-                if len(text) > 8000:
-                    text = text[:8000] + "\n... [truncated]"
-                source_sections.append(
-                    f"\n--- Document: {doc.filename} ---\n{text}"
-                )
-            except (OSError, UnicodeDecodeError) as e:
-                logger.warning("Failed to read source document %s: %s", doc_id, e)
-
-        if not source_sections:
-            return _SYSTEM_PROMPT_BASE
-
-        sources_block = "\n".join(source_sections)
-        return (
-            f"{_SYSTEM_PROMPT_BASE}\n\n"
-            "The following documents have been provided as context. "
-            "Use them to inform your responses:\n"
-            f"{sources_block}"
-        )
-
     # ── Toast helpers ───────────────────────────────────────────────────────────
 
     def _show_toast(self, toast: ToastNotification) -> None:
@@ -481,7 +523,7 @@ class ChatPanel(ft.Column):
             await asyncio.sleep(4)
             self._remove_toast(toast)
 
-        self._page.run_task(lambda: auto_dismiss())
+        asyncio.create_task(auto_dismiss())
 
     def _remove_toast(self, toast: ToastNotification) -> None:
         """Remove a toast from the panel."""

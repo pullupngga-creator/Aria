@@ -431,7 +431,7 @@ class VaultPanel(ft.Column):
 
     def _on_document_toggle_callback(self, doc_id: str) -> None:
         """Sync bridge — schedules async toggle on the event loop."""
-        self._page.run_task(lambda: self._handle_document_toggle(doc_id))
+        asyncio.create_task(self._handle_document_toggle(doc_id))
 
     async def _handle_document_toggle(self, doc_id: str) -> None:
         """Toggle document active state."""
@@ -545,7 +545,7 @@ class VaultPanel(ft.Column):
             await asyncio.sleep(4)
             self._remove_toast(toast)
 
-        self._page.run_task(lambda: auto_dismiss())
+        asyncio.create_task(auto_dismiss())
 
     def _remove_toast(self, toast: ToastNotification) -> None:
         """Remove a toast notification."""
