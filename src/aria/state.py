@@ -61,6 +61,16 @@ class AppState:
                 except Exception:
                     pass  # Silently handle observer errors
 
+    def load_documents(self, documents: list[dict[str, Any]]) -> None:
+        """Replace the in-memory document list (e.g., after loading from DB)."""
+        if self.documents == documents:
+            return
+        self.documents = documents
+        # Sync active document IDs
+        self.active_document_ids = {d["id"] for d in documents if d.get("is_active")}
+        self._notify_observers("documents_changed")
+        self._notify_observers("active_documents_changed")
+
     def add_document(self, document: dict[str, Any]) -> None:
         """Add a document to the vault."""
         self.documents.append(document)

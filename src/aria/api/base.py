@@ -1,6 +1,7 @@
 """Abstract base class for LLM provider clients."""
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 
 
 class LLMClient(ABC):
@@ -32,6 +33,27 @@ class LLMClient(ABC):
         ...
 
     @abstractmethod
+    def send_message_stream(
+        self,
+        messages: list[dict[str, str]],
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[str]:
+        """Send conversation history and stream the response text chunk-by-chunk.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content' keys.
+                      Roles: 'user', 'assistant', 'system'.
+            system_prompt: Optional system instruction prepended to the conversation.
+
+        Yields:
+            Response text chunks as they become available.
+
+        Raises:
+            aria.exceptions.APIError: On any provider-side failure.
+        """
+        ...
+
+    @abstractmethod
     async def validate_key(self) -> bool:
         """Check whether the configured API key is valid.
 
@@ -42,3 +64,4 @@ class LLMClient(ABC):
             aria.exceptions.APIError: On unexpected errors during validation.
         """
         ...
+

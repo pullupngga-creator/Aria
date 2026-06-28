@@ -8,7 +8,7 @@ priority-based assembly (active sources > mentioned sources).
 import asyncio
 import logging
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from aria.document.tokenizer import count_tokens
 from aria.document.vault import VaultManager
@@ -62,6 +62,25 @@ class TokenBudget(NamedTuple):
     document_count: int  # number of documents actually injected
 
 
+class TokenUsage(NamedTuple):
+    """Full token allocation breakdown for UI display.
+
+    Provides a comprehensive view of how the context window budget
+    is allocated across all components.
+    """
+
+    base_prompt_tokens: int  # tokens used by the base system prompt
+    source_tokens: int  # tokens used by injected sources (after cap/truncation)
+    user_message_tokens: int  # tokens in the current user message
+    history_tokens: int  # tokens in conversation history
+    reserved_tokens: int  # tokens reserved for model response
+    total_used: int  # sum of all above
+    context_limit: int  # maximum tokens allowed
+    remaining: int  # context_limit - total_used (can be negative if exceeded)
+    utilization: float  # total_used / context_limit (0.0–1.0+; >1.0 = exceeded)
+    document_count: int  # number of source documents included
+
+
 # ---------------------------------------------------------------------------
 # ContextInjector
 # ---------------------------------------------------------------------------
@@ -102,6 +121,79 @@ class ContextInjector:
         self._per_document_cap = per_document_cap
 
     # ── Public API ──────────────────────────────────────────────────────────────
+
+    async def calculate_usage(
+        self,
+        active_ids: set[str],
+        mentioned_ids: set[str] | None = None,
+        *,
+        user_message: str = "",
+        history_tokens: int = 0,
+    ) -> TokenUsage:
+        """Calculate the full token usage breakdown without building the prompt.
+
+        Reads sources, caps per-document, and sums all budget categories.
+        This is a lightweight read-only calculation suitable for UI display.
+
+        Args:
+            active_ids: IDs of globally activated documents.
+            mentioned_ids: IDs of @-mentioned documents.
+            user_message: The current user message text.
+            history_tokens: Token count of conversation history.
+
+        Returns:
+            TokenUsage namedtuple with the full allocation breakdown.
+        """
+        base_tokens = count_tokens(self._base_prompt)
+        user_tokens = count_tokens(user_message) if user_message else 0
+
+        # Read sources and sum their tokens (capped per-document)
+        ordered_ids = self._merge_ids(active_ids, mentioned_ids)
+        total_source_tokens = 0
+        doc_count = 0
+        for doc_id in ordered_ids:
+            result = await self._read_source_text(doc_id)
+            if result is not None:
+                capped = min(result[2], self._per_document_cap)
+                total_source_tokens += capped
+                doc_count += 1
+
+        # Available budget for sources
+        budget = self._calculate_budget(user_message, history_tokens)
+        # Actual source tokens used is min of total and budget
+        actual_source = min(total_source_tokens, budget)
+
+        total_used = (
+            base_tokens + actual_source + user_tokens + history_tokens
+            + self._reserved_for_response
+        )
+        remaining = self._context_limit - total_used
+        utilization = total_used / self._context_limit if self._context_limit > 0 else 0.0
+
+        return TokenUsage(
+            base_prompt_tokens=base_tokens,
+            source_tokens=actual_source,
+            user_message_tokens=user_tokens,
+            history_tokens=history_tokens,
+            reserved_tokens=self._reserved_for_response,
+            total_used=total_used,
+            context_limit=self._context_limit,
+            remaining=remaining,
+            utilization=utilization,
+            document_count=doc_count,
+        )
+
+    @staticmethod
+    def count_history_tokens(messages: list[dict[str, Any]]) -> int:
+        """Sum token counts for all messages in conversation history.
+
+        Args:
+            messages: List of message dicts with 'content' keys.
+
+        Returns:
+            Total token count across all messages.
+        """
+        return sum(count_tokens(m.get("content", "")) for m in messages)
 
     async def build(
         self,

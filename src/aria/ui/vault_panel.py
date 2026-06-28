@@ -377,6 +377,23 @@ class VaultPanel(ft.Column):
         """Load and display documents from vault."""
         try:
             documents = await self.vault_manager.get_all_documents()
+            # Sync documents list to global AppState
+            app_state.load_documents([
+                {
+                    "id": doc.id,
+                    "filename": doc.filename,
+                    "original_path": doc.original_path,
+                    "storage_path": doc.storage_path,
+                    "file_type": doc.file_type,
+                    "file_size_bytes": doc.file_size_bytes,
+                    "word_count": doc.word_count,
+                    "token_count": doc.token_count,
+                    "extracted_text": doc.extracted_text,
+                    "is_active": doc.is_active,
+                    "created_at": doc.created_at,
+                }
+                for doc in documents
+            ])
             if documents:
                 self._show_document_list(documents)
             else:

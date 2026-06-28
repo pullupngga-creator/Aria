@@ -2,12 +2,14 @@
 
 import asyncio
 import logging
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
 import flet as ft
 
+from aria.api import create_llm_client
 from aria.api.base import LLMClient
 from aria.chat import history as chat_history
 from aria.config import settings
@@ -38,19 +40,21 @@ class ChatPanel(ft.Column):
         self,
         page: ft.Page,
         on_collapse_toggle: Callable[[Any], Any],
-        llm_client_factory: Callable[[], LLMClient],
+        llm_client_factory: Callable[[], LLMClient] | None = None,
     ) -> None:
         """Initialize the chat panel.
 
         Args:
             page: The Flet page (used for run_task).
             on_collapse_toggle: Callback to toggle the vault sidebar.
-            llm_client_factory: Callable that returns a fresh LLMClient instance.
-                                Called lazily on first send to defer key validation.
+            llm_client_factory: Deprecated – ignored. Kept for backwards-compatibility
+                                during the transition to the multi-provider factory.
+                                The panel now uses ``create_llm_client`` internally.
         """
         super().__init__()
         self._page = page
         self._on_collapse_toggle = on_collapse_toggle
+        # Legacy factory kept for backwards-compat but unused in multi-provider mode
         self._llm_client_factory = llm_client_factory
         self._llm_client: LLMClient | None = None
         self._vault_manager = VaultManager()
@@ -64,6 +68,31 @@ class ChatPanel(ft.Column):
 
         self.expand = True
         self.spacing = 0
+
+        # ── Model dropdown data ────────────────────────────────────────────────
+        # Each option key is "<provider>|<model_name>" so we can split it later.
+        gemini_options: list[ft.dropdown.Option] = [
+            ft.dropdown.Option(
+                key="gemini|gemini-1.5-pro",
+                text="Gemini 1.5 Pro",
+            ),
+            ft.dropdown.Option(
+                key="gemini|gemini-1.5-flash",
+                text="Gemini 1.5 Flash",
+            ),
+            ft.dropdown.Option(
+                key="gemini|gemini-2.0-flash",
+                text="Gemini 2.0 Flash",
+            ),
+        ]
+        openrouter_options: list[ft.dropdown.Option] = [
+            ft.dropdown.Option(
+                key=f"openrouter|{m}",
+                text=f"[OR] {m.split('/')[-1]}",
+            )
+            for m in settings.openrouter_models
+        ]
+        all_model_options = gemini_options + openrouter_options
 
         # ── Header ──────────────────────────────────────────────────────────────
         self._expand_btn = ft.IconButton(
@@ -90,6 +119,23 @@ class ChatPanel(ft.Column):
             on_select=self._on_conversation_selected,
         )
 
+        # Model selector dropdown
+        self._model_dropdown = ft.Dropdown(
+            width=200,
+            hint_text="Select model",
+            value="gemini|gemini-1.5-pro",
+            text_size=TYPOGRAPHY["small"]["size"],
+            color=COLORS["text_primary"],
+            bgcolor=COLORS["bg_elevated"],
+            border_color=COLORS["border_subtle"],
+            focused_border_color=COLORS["accent_electric"],
+            border_radius=6,
+            content_padding=ft.Padding(left=10, right=10, top=6, bottom=6),
+            height=36,
+            options=all_model_options,
+            on_select=self._on_model_changed,
+        )
+
         self._header = ft.Container(
             content=ft.Row(
                 controls=[
@@ -102,6 +148,8 @@ class ChatPanel(ft.Column):
                     ),
                     ft.Container(width=12),
                     self._conversation_dropdown,
+                    ft.Container(width=4),
+                    self._model_dropdown,
                     ft.Container(width=4),
                     ft.IconButton(
                         icon=ft.Icons.ADD_COMMENT_OUTLINED,
@@ -199,6 +247,7 @@ class ChatPanel(ft.Column):
             on_send=self._on_send_callback,
             on_mention_trigger=self._on_mention_trigger,
             on_mention_dismiss=self._on_mention_dismiss,
+            on_text_change=self._on_input_text_change,
         )
 
         # ── Assemble main content ───────────────────────────────────────────────
@@ -232,11 +281,30 @@ class ChatPanel(ft.Column):
         app_state.add_observer("sending_state_changed", self._on_sending_state_changed)
         app_state.add_observer("conversations_changed", self._rebuild_conversation_dropdown)
         app_state.add_observer("conversation_changed", self._sync_dropdown_selection)
+        app_state.add_observer("conversation_changed", self._sync_model_dropdown)
+        app_state.add_observer("active_documents_changed", self._on_active_documents_changed)
+        app_state.add_observer("documents_changed", self._on_documents_changed)
 
         # Initial dropdown population (conversations may already be loaded from startup)
         self._rebuild_conversation_dropdown()
 
+    def did_mount(self) -> None:
+        """Called when the control is added to the page."""
+        self._recalculate_token_usage_sync("")
+
     # ── Observer callbacks (sync — invoked by AppState on the UI thread) ────────
+
+    def _on_input_text_change(self, text: str) -> None:
+        """Handle input text changes by updating token usage."""
+        self._recalculate_token_usage_sync(text)
+
+    def _on_active_documents_changed(self) -> None:
+        """Handle active documents change by updating token usage."""
+        self._recalculate_token_usage_sync(self._input_bar._text_field.value or "")
+
+    def _on_documents_changed(self) -> None:
+        """Handle documents list changes by updating token usage."""
+        self._recalculate_token_usage_sync(self._input_bar._text_field.value or "")
 
     def _sync_expand_btn(self) -> None:
         """Show/hide expand button based on vault collapse state."""
@@ -262,6 +330,67 @@ class ChatPanel(ft.Column):
             self._message_list.controls = bubbles
 
         self._content_area.update()
+        self._recalculate_token_usage_sync(self._input_bar._text_field.value or "")
+
+    def _recalculate_token_usage_sync(self, text: str) -> None:
+        """Recalculate token usage synchronously using in-memory state."""
+        # 1. Base prompt tokens
+        base_prompt = self._context_injector._base_prompt
+        from aria.document.tokenizer import count_tokens
+        base_tokens = count_tokens(base_prompt)
+
+        # 2. User message tokens
+        user_tokens = count_tokens(text)
+
+        # 3. History tokens
+        history_tokens = sum(msg.get("token_count", 0) or 0 for msg in app_state.messages)
+
+        # 4. Active & mentioned documents tokens
+        active_ids = app_state.active_document_ids
+        mentioned_ids = set(self._input_bar.mentioned_document_ids)
+
+        # Merge priorities: active first, then mentioned
+        seen_ids = set()
+        total_source_tokens = 0
+        doc_count = 0
+
+        # Find document token counts in app_state.documents
+        doc_map = {doc["id"]: doc for doc in app_state.documents}
+
+        for doc_id in active_ids:
+            if doc_id not in seen_ids and doc_id in doc_map:
+                seen_ids.add(doc_id)
+                capped = min(doc_map[doc_id]["token_count"], self._context_injector._per_document_cap)
+                total_source_tokens += capped
+                doc_count += 1
+
+        for doc_id in mentioned_ids:
+            if doc_id not in seen_ids and doc_id in doc_map:
+                seen_ids.add(doc_id)
+                capped = min(doc_map[doc_id]["token_count"], self._context_injector._per_document_cap)
+                total_source_tokens += capped
+                doc_count += 1
+
+        # 5. Reserved for response
+        reserved = self._context_injector._reserved_for_response
+
+        # 6. Sum total
+        overhead = base_tokens + user_tokens + history_tokens + reserved
+        limit = self._context_injector._context_limit
+        budget = max(0, limit - overhead)
+
+        actual_source = min(total_source_tokens, budget)
+        total_used = base_tokens + actual_source + user_tokens + history_tokens + reserved
+
+        utilization = total_used / limit if limit > 0 else 0.0
+
+        # Update input bar
+        self._input_bar.update_usage(
+            chars=len(text),
+            tokens=total_used,
+            limit=limit,
+            utilization=utilization,
+        )
 
     def _on_sending_state_changed(self) -> None:
         """Update loading indicator and input bar based on sending state."""
@@ -289,10 +418,33 @@ class ChatPanel(ft.Column):
             pass
 
     def _sync_dropdown_selection(self) -> None:
-        """Sync the dropdown value when current_conversation_id changes externally."""
+        """Sync the conversation dropdown value when current_conversation_id changes externally."""
         self._conversation_dropdown.value = app_state.current_conversation_id or ""
         try:
             self._conversation_dropdown.update()
+        except (AssertionError, RuntimeError):
+            pass
+
+    def _sync_model_dropdown(self) -> None:
+        """Sync the model dropdown to the active conversation's provider/model."""
+        conv_id = app_state.current_conversation_id
+        if conv_id is None:
+            # New chat — reset to default model
+            self._model_dropdown.value = "gemini|gemini-1.5-pro"
+        else:
+            # Find the conversation in app_state and read its provider/model
+            conv = next(
+                (c for c in app_state.conversations if c.get("id") == conv_id),
+                None,
+            )
+            if conv:
+                provider = conv.get("model_provider", "gemini")
+                model = conv.get("model_name", "gemini-1.5-pro")
+                self._model_dropdown.value = f"{provider}|{model}"
+        # Reset cached client so next send uses the correct provider
+        self._llm_client = None
+        try:
+            self._model_dropdown.update()
         except (AssertionError, RuntimeError):
             pass
 
@@ -366,7 +518,41 @@ class ChatPanel(ft.Column):
     async def _on_new_chat(self, e: Any) -> None:
         """Start a new conversation, clearing current messages."""
         app_state.set_current_conversation(None)
-        # Dropdown selection is cleared via the conversation_changed observer
+        # Reset model dropdown to default and drop cached client
+        self._model_dropdown.value = "gemini|gemini-1.5-pro"
+        self._llm_client = None
+        try:
+            self._model_dropdown.update()
+        except (AssertionError, RuntimeError):
+            pass
+
+    async def _on_model_changed(self, e: Any) -> None:
+        """Persist the new model selection and reset the cached LLM client."""
+        selected: str | None = self._model_dropdown.value
+        if not selected:
+            return
+        # Invalidate cached client so next send rebuilds it
+        self._llm_client = None
+
+        # Persist to DB if a conversation is already active
+        conv_id = app_state.current_conversation_id
+        if conv_id:
+            try:
+                provider, model_name = selected.split("|", 1)
+                await chat_history.update_conversation_model(conv_id, provider, model_name)
+                # Reflect the change in app_state so other observers see it
+                for conv in app_state.conversations:
+                    if conv.get("id") == conv_id:
+                        conv["model_provider"] = provider
+                        conv["model_name"] = model_name
+                        break
+                logger.info(
+                    "Model switched to %s/%s for conversation %s",
+                    provider, model_name, conv_id,
+                )
+            except Exception:
+                logger.error("Failed to persist model change", exc_info=True)
+                self._show_error("Failed to save model selection.")
 
     async def _on_conversation_selected(self, e: Any) -> None:
         """Handle selection change in the conversation dropdown."""
@@ -407,22 +593,32 @@ class ChatPanel(ft.Column):
         if not text.strip():
             return
 
+        # Generate a placeholder ID to remove if error occurs before generating any text
+        asst_placeholder_id = str(uuid.uuid4())
+
         try:
             app_state.set_sending(True)
 
             # Create conversation on first message
             if app_state.current_conversation_id is None:
+                # Parse selected model from the dropdown
+                selected_model_key = self._model_dropdown.value or "gemini|gemini-1.5-pro"
+                try:
+                    init_provider, init_model = selected_model_key.split("|", 1)
+                except ValueError:
+                    init_provider, init_model = "gemini", "gemini-1.5-pro"
+
                 conv_id = await chat_history.create_conversation(
-                    model_provider="gemini",
-                    model_name="gemini-1.5-pro",
+                    model_provider=init_provider,
+                    model_name=init_model,
                 )
                 app_state.current_conversation_id = conv_id
                 # Add to in-memory list so it appears in the dropdown
                 app_state.add_conversation({
                     "id": conv_id,
                     "title": "New Chat",
-                    "model_provider": "gemini",
-                    "model_name": "gemini-1.5-pro",
+                    "model_provider": init_provider,
+                    "model_name": init_model,
                     "system_prompt": None,
                     "created_at": datetime.now(UTC).isoformat(),
                     "updated_at": datetime.now(UTC).isoformat(),
@@ -433,11 +629,13 @@ class ChatPanel(ft.Column):
             assert conv_id is not None  # Guaranteed by create above
 
             # Save user message to DB (returns id + timestamp)
+            from aria.document.tokenizer import count_tokens
+            user_token_count = count_tokens(text)
             msg_id, msg_ts = await chat_history.save_message(
                 conversation_id=conv_id,
                 role="user",
                 content=text,
-                token_count=len(text.split()),  # rough estimate
+                token_count=user_token_count,
             )
 
             # Add to in-memory state (triggers UI rebuild)
@@ -445,6 +643,7 @@ class ChatPanel(ft.Column):
                 "id": msg_id,
                 "role": "user",
                 "content": text,
+                "token_count": user_token_count,
                 "created_at": msg_ts,
             })
 
@@ -463,33 +662,71 @@ class ChatPanel(ft.Column):
                 if m.get("role") in ("user", "assistant")
             ]
 
-            # Lazy-init LLM client
+            # Lazy-init LLM client using the unified factory
             if self._llm_client is None:
-                self._llm_client = self._llm_client_factory()
+                selected_key = self._model_dropdown.value or "gemini|gemini-1.5-pro"
+                try:
+                    active_provider, active_model = selected_key.split("|", 1)
+                except ValueError:
+                    active_provider, active_model = "gemini", "gemini-1.5-pro"
 
-            # Call the LLM (native async, no asyncio.run needed)
-            response_text = await self._llm_client.send_message(api_messages, system_prompt)
+                self._llm_client = create_llm_client(
+                    provider=active_provider,
+                    model_name=active_model,
+                    gemini_api_key=settings.gemini_api_key,
+                    openrouter_api_key=settings.openrouter_api_key,
+                )
+
+            # Create placeholder assistant message in state with empty content
+            asst_placeholder_ts = datetime.now(UTC).isoformat()
+            app_state.add_message({
+                "id": asst_placeholder_id,
+                "role": "assistant",
+                "content": "",
+                "created_at": asst_placeholder_ts,
+            })
+
+            # Find the last bubble in the message list to stream chunks directly
+            bubble = self._message_list.controls[-1]
+            assert isinstance(bubble, MessageBubble)
+
+            response_text = ""
+            async for chunk in self._llm_client.send_message_stream(api_messages, system_prompt):
+                response_text += chunk
+                bubble.update_content(response_text)
 
             if not response_text:
                 response_text = "No response generated."
+                bubble.update_content(response_text)
 
-            # Save assistant message to DB (returns id + timestamp)
-            asst_id, asst_ts = await chat_history.save_message(
+            # Save completed assistant message to DB (returns actual id + timestamp)
+            asst_token_count = count_tokens(response_text)
+
+            # Determine provider/model from active dropdown
+            selected_key = self._model_dropdown.value or "gemini|gemini-1.5-pro"
+            try:
+                active_provider, active_model = selected_key.split("|", 1)
+            except ValueError:
+                active_provider, active_model = "gemini", "gemini-1.5-pro"
+
+            saved_id, saved_ts = await chat_history.save_message(
                 conversation_id=conv_id,
                 role="assistant",
                 content=response_text,
-                token_count=len(response_text.split()),
-                model_provider="gemini",
-                model_name="gemini-1.5-pro",
+                token_count=asst_token_count,
+                model_provider=active_provider,
+                model_name=active_model,
             )
 
-            # Add to in-memory state (triggers UI rebuild)
-            app_state.add_message({
-                "id": asst_id,
-                "role": "assistant",
-                "content": response_text,
-                "created_at": asst_ts,
-            })
+            # Update the message metadata in app_state
+            if app_state.messages:
+                app_state.messages[-1]["id"] = saved_id
+                app_state.messages[-1]["content"] = response_text
+                app_state.messages[-1]["token_count"] = asst_token_count
+                app_state.messages[-1]["created_at"] = saved_ts
+
+            # Re-notify observers once at the end to synchronize database IDs and timestamps
+            app_state._notify_observers("messages_changed")
 
             # ── Auto-title: derive a title from the first user message ──
             # Only re-title if the conversation still has the default name.
@@ -504,9 +741,16 @@ class ChatPanel(ft.Column):
         except APIError as e:
             logger.error("API error during send", exc_info=True)
             self._show_error(e.message)
+            # Remove the empty placeholder if streaming failed before any content was written
+            if app_state.messages and app_state.messages[-1]["id"] == asst_placeholder_id and not app_state.messages[-1]["content"]:
+                app_state.messages.pop()
+                app_state._notify_observers("messages_changed")
         except Exception:
             logger.error("Unexpected error during send", exc_info=True)
             self._show_error("An unexpected error occurred. Please try again.")
+            if app_state.messages and app_state.messages[-1]["id"] == asst_placeholder_id and not app_state.messages[-1]["content"]:
+                app_state.messages.pop()
+                app_state._notify_observers("messages_changed")
         finally:
             app_state.set_sending(False)
 

@@ -29,7 +29,7 @@ class MessageBubble(ft.Container):
         timestamp_display = self._format_timestamp(created_at)
 
         # Message text
-        message_text = ft.Text(
+        self.message_text = ft.Text(
             content,
             color=COLORS["text_primary"],
             size=TYPOGRAPHY["body"]["size"],
@@ -46,7 +46,7 @@ class MessageBubble(ft.Container):
         # Inner column: message + timestamp
         inner = ft.Column(
             [
-                message_text,
+                self.message_text,
                 ft.Container(height=4),
                 timestamp_label,
             ],
@@ -97,6 +97,12 @@ class MessageBubble(ft.Container):
             )
 
         self.padding = ft.Padding(left=16, right=16, top=4, bottom=4)
+
+    def update_content(self, text: str) -> None:
+        """Update the message text content and trigger a control update."""
+        self._content = text
+        self.message_text.value = text
+        self.message_text.update()
 
     @staticmethod
     def _format_timestamp(created_at: str) -> str:

@@ -9,6 +9,7 @@ _SETTINGS_DEFAULTS: list[tuple[str, str]] = [
     ("default_model", '"gemini-1.5-pro"'),
     ("gemini_api_key", '""'),
     ("claude_api_key", '""'),
+    ("openrouter_api_key", '""'),
     ("max_context_sources", "5"),
     ("auto_save_interval", "30"),
     ("vault_panel_width", "320"),

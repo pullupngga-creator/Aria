@@ -24,7 +24,7 @@ class FileSizeExceededError(AriaError):
 
 
 class UnsupportedFileTypeError(AriaError):
-    """Raised for non-PDF/TXT files in Phase 0."""
+    """Raised for file types not in the supported set (PDF, TXT, DOCX, CSV, XLSX, MD)."""
 
     pass
 

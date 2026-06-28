@@ -10,14 +10,14 @@ import aiofiles
 import aiosqlite
 
 from aria.db.connection import get_async_connection
-from aria.document.parser import extract_pdf, extract_txt
+from aria.document.parser import extract_text
 from aria.document.tokenizer import count_tokens, count_words
 from aria.exceptions import FileSizeExceededError, UnsupportedFileTypeError, VaultError
 
 logger = logging.getLogger(__name__)
 
-# Phase 0: Only PDF and TXT supported
-ALLOWED_EXTENSIONS = {".pdf", ".txt"}
+# Supported document types
+ALLOWED_EXTENSIONS = {".pdf", ".txt", ".docx", ".csv", ".xlsx", ".md"}
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50MB
 
 # Vault storage directory
@@ -60,8 +60,10 @@ class VaultManager:
         # Check file extension
         ext = file_path.suffix.lower()
         if ext not in ALLOWED_EXTENSIONS:
+            supported = ", ".join(sorted(ALLOWED_EXTENSIONS))
             raise UnsupportedFileTypeError(
-                f"Unsupported file type: {ext}. Only PDF and TXT are supported in Phase 0."
+                f"Unsupported file type: {ext}. "
+                f"Supported formats: {supported}."
             )
 
         # Check file size
@@ -95,12 +97,9 @@ class VaultManager:
             storage_filename = f"doc_{doc_id}.txt"
             storage_path = _VAULT_DIR / storage_filename
 
-            # Extract text in a background thread (pymupdf is CPU-bound)
+            # Extract text in a background thread (all parsers are CPU-bound)
+            extracted_text = await asyncio.to_thread(extract_text, file_path)
             file_type = file_path.suffix.lower().lstrip(".")
-            if file_type == "pdf":
-                extracted_text = await asyncio.to_thread(extract_pdf, file_path)
-            else:  # txt
-                extracted_text = await asyncio.to_thread(extract_txt, file_path)
 
             # Store extracted text as UTF-8 .txt file (async I/O)
             async with aiofiles.open(storage_path, "w", encoding="utf-8") as f:

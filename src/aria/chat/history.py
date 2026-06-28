@@ -213,6 +213,47 @@ async def update_conversation_title(conversation_id: str, title: str) -> None:
         await db.close()
 
 
+async def update_conversation_model(
+    conversation_id: str,
+    provider: str,
+    model_name: str,
+) -> None:
+    """Update the model provider and name for an existing conversation.
+
+    Used when the user switches models mid-conversation via the header dropdown.
+
+    Args:
+        conversation_id: UUID of the conversation.
+        provider: New provider identifier (e.g., ``'gemini'``, ``'openrouter'``).
+        model_name: New model identifier (e.g., ``'openai/gpt-4o'``).
+    """
+    db = await get_async_connection()
+    try:
+        await db.execute(
+            """
+            UPDATE conversations
+            SET model_provider = ?, model_name = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (provider, model_name, datetime.now(UTC).isoformat(), conversation_id),
+        )
+        await db.commit()
+        logger.info(
+            "Conversation model updated",
+            extra={
+                "conversation_id": conversation_id,
+                "provider": provider,
+                "model_name": model_name,
+            },
+        )
+    except aiosqlite.Error:
+        logger.error("Failed to update conversation model", exc_info=True)
+        raise
+    finally:
+        await db.close()
+
+
+
 async def get_conversation(conversation_id: str) -> dict[str, str | int | None] | None:
     """Retrieve a single conversation by its ID.
 

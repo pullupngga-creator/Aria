@@ -25,11 +25,11 @@
 
 ### Milestones
 - [x] @-mention parser and inline dropdown (fuzzy search, keyboard nav)
-- [ ] Context injection engine (system prompt builder + source text assembly)
-- [ ] Token budget management (count, display, enforce limits)
-- [ ] Streaming response rendering (token-by-token display)
-- [ ] Multi-provider support (Gemini + Claude with unified interface)
-- [ ] Document parsing expanded: DOCX, CSV, XLSX, Markdown
+- [x] Context injection engine (system prompt builder + source text assembly)
+- [x] Token budget management (count, display, enforce limits)
+- [x] Streaming response rendering (token-by-token display)
+- [x] Multi-provider support (Gemini + Openrouter with unified interface)
+- [x] Document parsing expanded: DOCX, CSV, XLSX, Markdown
 - [ ] Vault search (filename + content preview)
 - [ ] Message actions: copy, regenerate, delete
 - [ ] Conversation management: new, rename, archive

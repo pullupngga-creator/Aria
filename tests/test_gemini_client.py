@@ -16,6 +16,24 @@ class FakeResponse:
         self.text = text
 
 
+class FakeStream:
+    """Fake async generator representing the response stream."""
+
+    def __init__(self, chunks: list[str]) -> None:
+        self.chunks = chunks
+
+    def __aiter__(self) -> "FakeStream":
+        self.index = 0
+        return self
+
+    async def __anext__(self) -> FakeResponse:
+        if self.index >= len(self.chunks):
+            raise StopAsyncIteration
+        chunk = self.chunks[self.index]
+        self.index += 1
+        return FakeResponse(chunk)
+
+
 def _make_client_error(code: int, message: str = "error") -> ClientError:
     """Helper to create a ClientError with a given status code."""
     return ClientError(code, {"error": {"message": message}}, None)
@@ -227,3 +245,81 @@ class TestValidateKey:
         client = GeminiClient(api_key="bad-key")
         with pytest.raises(APIError, match="Invalid Gemini API key"):
             await client.validate_key()
+
+
+class TestSendMessageStream:
+    """Tests for GeminiClient.send_message_stream()."""
+
+    @pytest.mark.asyncio
+    async def test_yields_response_chunks(self, mock_genai_client: MagicMock) -> None:
+        """send_message_stream yields text chunks as they become available."""
+        mock_genai_client.aio.models.generate_content_stream = AsyncMock(
+            return_value=FakeStream(["Hello ", "world", "!"]),
+        )
+
+        client = GeminiClient(api_key="test-key")
+        stream = client.send_message_stream(
+            messages=[{"role": "user", "content": "Hello"}],
+        )
+
+        chunks = []
+        async for chunk in stream:
+            chunks.append(chunk)
+
+        assert chunks == ["Hello ", "world", "!"]
+
+    @pytest.mark.asyncio
+    async def test_stream_empty_messages_raises(self, mock_genai_client: MagicMock) -> None:
+        """send_message_stream raises APIError for empty message list."""
+        client = GeminiClient(api_key="test-key")
+        stream = client.send_message_stream(messages=[])
+        with pytest.raises(APIError, match="empty message list"):
+            async for _ in stream:
+                pass
+
+    @pytest.mark.asyncio
+    async def test_stream_passes_system_prompt(self, mock_genai_client: MagicMock) -> None:
+        """System prompt is passed via GenerateContentConfig."""
+        mock_genai_client.aio.models.generate_content_stream = AsyncMock(
+            return_value=FakeStream(["ok"]),
+        )
+
+        client = GeminiClient(api_key="test-key")
+        stream = client.send_message_stream(
+            messages=[{"role": "user", "content": "Hi"}],
+            system_prompt="You are a helper.",
+        )
+        # Consume the stream to trigger call
+        async for _ in stream:
+            pass
+        call_kwargs = mock_genai_client.aio.models.generate_content_stream.call_args
+        config = call_kwargs.kwargs.get("config") or call_kwargs[1].get("config")
+        assert config is not None
+        assert config.system_instruction == "You are a helper."
+
+    @pytest.mark.asyncio
+    async def test_stream_retries_on_server_error(self, mock_genai_client: MagicMock) -> None:
+        """Retries starting stream on ServerError and succeeds on second attempt."""
+        call_count = 0
+
+        async def side_effect(**kwargs: object) -> FakeStream:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise ServerError(503, {"error": {"message": "unavailable"}}, None)
+            return FakeStream(["success"])
+
+        mock_genai_client.aio.models.generate_content_stream = AsyncMock(
+            side_effect=side_effect,
+        )
+
+        client = GeminiClient(api_key="test-key")
+        with patch("aria.api.gemini._BACKOFF_SECONDS", [0.0, 0.0, 0.0]):
+            stream = client.send_message_stream(
+                messages=[{"role": "user", "content": "Hello"}],
+            )
+            chunks = [c async for c in stream]
+
+        assert chunks == ["success"]
+        assert call_count == 2
+

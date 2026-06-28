@@ -1,6 +1,7 @@
 """Google Gemini LLM client implementation."""
 
 import asyncio
+from collections.abc import AsyncIterator
 import logging
 
 from google import genai
@@ -166,6 +167,102 @@ class GeminiClient(LLMClient):
         raise APIError(
             "Gemini service is temporarily unavailable. Please try again later."
         ) from last_error
+
+    async def send_message_stream(
+        self,
+        messages: list[dict[str, str]],
+        system_prompt: str | None = None,
+    ) -> AsyncIterator[str]:
+        """Send conversation to Gemini and stream the response text chunk-by-chunk.
+
+        Args:
+            messages: Conversation history; last item must be the new user message.
+            system_prompt: Optional system instruction.
+
+        Yields:
+            Response text chunks as they become available.
+
+        Raises:
+            APIError: On authentication failure, timeout, or persistent service errors.
+        """
+        if not messages:
+            raise APIError("Cannot send an empty message list.")
+
+        # Build contents: history + current user turn
+        history_contents = self._build_contents(messages)
+        current_turn = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=messages[-1]["content"])],
+        )
+        all_contents = [*history_contents, current_turn]
+
+        # Build config with optional system instruction
+        config = types.GenerateContentConfig(
+            system_instruction=system_prompt,
+        ) if system_prompt else None
+
+        last_error: Exception | None = None
+        response_stream = None
+        for attempt in range(_MAX_RETRIES):
+            try:
+                response_stream = await asyncio.wait_for(
+                    self._client.aio.models.generate_content_stream(
+                        model=self._model_name,
+                        contents=all_contents,
+                        config=config,
+                    ),
+                    timeout=self._timeout,
+                )
+                break
+            except ClientError as e:
+                if e.code == 401:
+                    logger.error("Gemini API key is invalid")
+                    raise APIError(
+                        "Invalid Gemini API key. Please check your GEMINI_API_KEY."
+                    ) from e
+                if e.code == 429:
+                    last_error = e
+                    wait = _BACKOFF_SECONDS[attempt]
+                    logger.warning(
+                        "Gemini API rate limit (attempt %d/%d), retrying in %.1fs: %s",
+                        attempt + 1, _MAX_RETRIES, wait, str(e),
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    logger.error("Unexpected Gemini client error: %s", e)
+                    raise APIError(f"Gemini API error: {e}") from e
+            except ServerError as e:
+                last_error = e
+                wait = _BACKOFF_SECONDS[attempt]
+                logger.warning(
+                    "Gemini API error (attempt %d/%d), retrying in %.1fs: %s",
+                    attempt + 1, _MAX_RETRIES, wait, str(e),
+                )
+                await asyncio.sleep(wait)
+            except TimeoutError as e:
+                logger.error("Gemini API stream request timed out after %.1fs", self._timeout)
+                raise APIError(
+                    f"Request timed out after {int(self._timeout)}s. Please try again."
+                ) from e
+            except GenaiAPIError as e:
+                logger.error("Unexpected Gemini API error: %s", e)
+                raise APIError(f"Gemini API error: {e}") from e
+
+        if response_stream is None:
+            logger.error("Gemini API retries exhausted after %d attempts", _MAX_RETRIES)
+            raise APIError(
+                "Gemini service is temporarily unavailable. Please try again later."
+            ) from last_error
+
+        try:
+            async for chunk in response_stream:
+                yield chunk.text or ""
+        except GenaiAPIError as e:
+            logger.error("Gemini API stream error during generation: %s", e)
+            raise APIError(f"Gemini API stream error: {e}") from e
+        except Exception as e:
+            logger.error("Unexpected error during streaming: %s", e)
+            raise APIError(f"Streaming error: {e}") from e
 
     async def validate_key(self) -> bool:
         """Check if the configured API key is valid by listing available models.

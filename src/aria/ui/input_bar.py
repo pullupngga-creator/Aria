@@ -30,6 +30,7 @@ class InputBar(ft.Container):
         on_send: Callable[[str], None],
         on_mention_trigger: Callable[[str], None] | None = None,
         on_mention_dismiss: Callable[[], None] | None = None,
+        on_text_change: Callable[[str], None] | None = None,
     ) -> None:
         """Initialize the input bar.
 
@@ -39,11 +40,14 @@ class InputBar(ft.Container):
                 the user is typing an active @-mention.
             on_mention_dismiss: Called when the active @-mention trigger ends
                 (user typed a space, deleted the @, or a mention was selected).
+            on_text_change: Called with the full text whenever the input changes.
+                Used by ChatPanel to update the token budget bar.
         """
         super().__init__()
         self._on_send = on_send
         self._on_mention_trigger = on_mention_trigger
         self._on_mention_dismiss = on_mention_dismiss
+        self._on_text_change = on_text_change
         self._enabled: bool = True
 
         # ── @-mention state ──────────────────────────────────────────────────
@@ -54,11 +58,19 @@ class InputBar(ft.Container):
         # rather than dispatching a message.
         self.is_mention_dropdown_open: bool = False
 
-        # ── Character counter ────────────────────────────────────────────────
-        self._char_counter = ft.Text(
-            "0 chars",
+        # ── Token & Character Counter Label ──────────────────────────────────
+        self._counter_label = ft.Text(
+            "0 chars • 0 / 128,000 tokens (0.0%)",
             color=COLORS["text_muted"],
             size=TYPOGRAPHY["micro"]["size"],
+        )
+
+        # ── Context Window Progress Bar ──────────────────────────────────────
+        self._token_progress = ft.ProgressBar(
+            value=0.0,
+            height=4,
+            color=COLORS["accent_electric"],
+            bgcolor=COLORS["border_hairline"],
         )
 
         # ── Main text input ──────────────────────────────────────────────────
@@ -121,9 +133,13 @@ class InputBar(ft.Container):
         self.content = ft.Column(
             [
                 self._chips_container,
+                ft.Container(
+                    content=self._token_progress,
+                    padding=ft.Padding(left=0, right=0, top=0, bottom=6),
+                ),
                 input_row,
                 ft.Container(
-                    content=self._char_counter,
+                    content=self._counter_label,
                     alignment=ft.Alignment(1, 0),
                     padding=ft.Padding(left=0, right=4, top=4, bottom=0),
                 ),
@@ -156,13 +172,12 @@ class InputBar(ft.Container):
         self._send()
 
     def _handle_change(self, e: Any) -> None:
-        """Update character counter and detect @-mention triggers."""
+        """Detect @-mention triggers and fire change callback."""
         text = self._text_field.value or ""
 
-        # Update character counter
-        char_count = len(text)
-        self._char_counter.value = f"{char_count} chars"
-        self._char_counter.update()
+        # Fire external text change callback (for token budget bar updates)
+        if self._on_text_change is not None:
+            self._on_text_change(text)
 
         # ── @-mention trigger detection ──────────────────────────────────────
         trigger_query = detect_active_trigger(text)
@@ -188,8 +203,11 @@ class InputBar(ft.Container):
         self._on_send(text)
         self._text_field.value = ""
         self._text_field.update()
-        self._char_counter.value = "0 chars"
-        self._char_counter.update()
+
+        # Fire external text change callback with empty text to reset counter
+        if self._on_text_change is not None:
+            self._on_text_change("")
+
         # Clear mention chips after send
         self.clear_mentions()
 
@@ -232,13 +250,12 @@ class InputBar(ft.Container):
         self._chips_container.visible = True
         self._chips_container.update()
 
-        # Update character counter (text changed)
-        char_count = len(self._text_field.value or "")
-        self._char_counter.value = f"{char_count} chars"
-        self._char_counter.update()
-
         # Reset trigger state and fire dismiss to close the dropdown
         self._reset_mention_trigger()
+
+        # Fire external text change callback (for token budget bar updates)
+        if self._on_text_change is not None:
+            self._on_text_change(self._text_field.value or "")
 
     @property
     def mentioned_document_ids(self) -> list[str]:
@@ -322,6 +339,35 @@ class InputBar(ft.Container):
 
         try:
             self._chips_container.update()
+        except (AssertionError, RuntimeError):
+            pass
+
+        # Fire external text change callback (for token budget bar updates)
+        if self._on_text_change is not None:
+            self._on_text_change(self._text_field.value or "")
+
+    def update_usage(self, chars: int, tokens: int, limit: int, utilization: float) -> None:
+        """Update character/token counter and context progress bar."""
+        percentage = min(100.0, utilization * 100.0)
+        self._counter_label.value = f"{chars} chars • {tokens:,} / {limit:,} tokens ({percentage:.1f}%)"
+
+        # Cap progress bar at 1.0
+        self._token_progress.value = min(1.0, utilization)
+
+        # Color coding progress bar and label based on usage percentage
+        if utilization >= 1.0:
+            self._token_progress.color = COLORS["accent_error"]
+            self._counter_label.color = COLORS["accent_error"]
+        elif utilization >= 0.8:
+            self._token_progress.color = COLORS["accent_warning"]
+            self._counter_label.color = COLORS["accent_warning"]
+        else:
+            self._token_progress.color = COLORS["accent_electric"]
+            self._counter_label.color = COLORS["text_muted"]
+
+        try:
+            self._counter_label.update()
+            self._token_progress.update()
         except (AssertionError, RuntimeError):
             pass
 

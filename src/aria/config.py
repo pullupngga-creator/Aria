@@ -27,6 +27,16 @@ class Settings(BaseSettings):
     # API Keys (loaded from environment or ~/.aria/config.toml)
     gemini_api_key: str | None = None
     anthropic_api_key: str | None = None
+    openrouter_api_key: str | None = None
+
+    # OpenRouter model catalogue (user-visible choices in the model dropdown)
+    openrouter_models: list[str] = [
+        "meta-llama/llama-3-70b-instruct",
+        "meta-llama/llama-3-8b-instruct",
+        "anthropic/claude-3.5-sonnet",
+        "openai/gpt-4o",
+        "mistralai/mistral-7b-instruct",
+    ]
 
     # UI Settings
     min_window_width: int = 1024

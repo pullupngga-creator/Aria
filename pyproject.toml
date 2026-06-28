@@ -18,6 +18,8 @@ dependencies = [
     "aiofiles>=24.1.0",
     "markdown>=3.7.0",
     "tiktoken>=0.8.0",
+    "openai>=1.0.0",
+    "openpyxl>=3.1.5",
 ]
 
 [dependency-groups]
