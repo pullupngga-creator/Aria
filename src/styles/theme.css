@@ -1,0 +1,47 @@
+/* ── Aria Design Tokens — Light Mode ── */
+:root {
+  --sidebar:            #1A1D2E;
+  --sidebar-hover:      #22263A;
+  --sidebar-icon:       #8B8FA3;
+  --sidebar-icon-active:#E86A33;
+  --sidebar-w:          72px;
+
+  --bg:                 #F5F6FA;
+  --surface:            #FFFFFF;
+  --surface-hover:      #F0F1F5;
+  --border:             #E5E7EB;
+
+  --text-primary:       #111111;
+  --text-secondary:     #6B7280;
+  --text-muted:         #9CA3AF;
+
+  --accent:             #E86A33;
+  --accent-hover:       #D45A28;
+  --accent-glow:        rgba(232, 106, 51, 0.10);
+
+  --success:            #34C759;
+  --warning:            #FF9500;
+  --danger:             #FF3B30;
+  --blue:               #4F7DF3;
+  --purple:             #AF52DE;
+  --cyan:               #5AC8FA;
+  --white:              #FFFFFF;
+
+  --radius:             10px;
+  --radius-sm:          8px;
+  --radius-full:        9999px;
+
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+/* ── Dark Mode ── */
+[data-theme="dark"] {
+  --bg:                 #0C0E17;
+  --surface:            #141729;
+  --surface-hover:      #1C1F33;
+  --border:             rgba(255,255,255,0.06);
+  --text-primary:       #E8E8ED;
+  --text-secondary:     #8B8FA3;
+  --text-muted:         #5C6178;
+  --accent-glow:        rgba(232, 106, 51, 0.18);
+}

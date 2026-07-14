@@ -1,0 +1,81 @@
+/* Loading Screen */
+.loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  transition: opacity 0.3s ease;
+  gap: 2rem;
+}
+
+.loading-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-logo {
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+}
+
+/* Mini loader component */
+.loader-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+}
+
+.loader-dot {
+  height: 13px;
+  width: 20px;
+  margin-right: 10px;
+  border-radius: 10px;
+  background-color: var(--accent);
+  animation: loaderpulse 1.5s infinite ease-in-out;
+}
+
+.loader-dot:last-child {
+  margin-right: 0;
+}
+
+.loader-dot:nth-child(1) {
+  animation-delay: -0.3s;
+}
+
+.loader-dot:nth-child(2) {
+  animation-delay: -0.1s;
+}
+
+.loader-dot:nth-child(3) {
+  animation-delay: 0.1s;
+}
+
+@keyframes loaderpulse {
+  0% {
+    transform: scale(0.8);
+    background-color: var(--accent);
+    opacity: 0.7;
+  }
+
+  50% {
+    transform: scale(1.2);
+    background-color: var(--accent);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(0.8);
+    background-color: var(--accent);
+    opacity: 0.7;
+  }
+}
+/* Mini loader component end */

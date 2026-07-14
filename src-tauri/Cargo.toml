@@ -1,0 +1,51 @@
+[package]
+name = "Aria"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "aria_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+specta = "=2.0.0-rc.20"
+tauri-specta = { version = "=2.0.0-rc.20", features = ["javascript", "typescript"] }
+specta-typescript = "0.0.7"
+specta-jsdoc = "0.0.7"
+rusqlite = { version = "0.31", features = ["bundled"] }
+directories = "5.0"
+anyhow = "1.0"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+rand = "0.8"
+keyring = "3.2"
+sha2 = "0.10"
+hex = "0.4"
+tokio = { version = "1.40", features = ["full"] }
+mdns-sd = "0.13"
+local-ip-address = "0.6.13"
+chrono = "0.4"
+base64 = "0.22"
+uuid = { version = "1", features = ["v4", "serde"] }
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

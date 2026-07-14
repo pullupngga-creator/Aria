@@ -1,0 +1,4630 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aria | Local P2P Communication</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;510;550;590;600&amp;display=swap"
+    rel="stylesheet">
+  <style>
+    :root {
+      --sidebar: #1A1D2E;
+      --sidebar-hover: #22263A;
+      --sidebar-icon: #8B8FA3;
+      --sidebar-icon-active: #E86A33;
+      --bg: #F5F6FA;
+      --surface: #FFFFFF;
+      --surface-hover: #F0F1F5;
+      --border: #E5E7EB;
+      --text-primary: #111111;
+      --text-secondary: #6B7280;
+      --text-muted: #9CA3AF;
+      --accent: #E86A33;
+      --accent-hover: #D45A28;
+      --accent-glow: rgba(232, 106, 51, 0.10);
+      --success: #34C759;
+      --white: #FFFFFF;
+
+      --sidebar-w: 72px;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      --radius: 10px;
+      --radius-sm: 8px;
+      --radius-full: 9999px;
+    }
+
+    [data-theme] {
+      --bg: #0C0E17;
+      --surface: #141729;
+      --surface-hover: #1C1F33;
+      --border: rgba(255, 255, 255, 0.06);
+      --text-primary: #E8E8ED;
+      --text-secondary: #8B8FA3;
+      --text-muted: #5C6178;
+      --accent-glow: rgba(232, 106, 51, 0.18);
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .app {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 0 16px;
+      background: var(--sidebar);
+      gap: 4px;
+      z-index: 10;
+    }
+
+    .sidebar__logo {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 8px;
+    }
+
+    .sidebar__logo svg {
+      width: 22px;
+      height: 22px;
+      color: var(--accent);
+    }
+
+    .sidebar__nav {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      width: 100%;
+      padding: 0 12px;
+    }
+
+    .sidebar__nav-item {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--sidebar-icon);
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+    }
+
+    .sidebar__nav-item:hover {
+      background: var(--sidebar-hover);
+      color: #fff;
+    }
+
+    .sidebar__nav-item.active {
+      color: var(--sidebar-icon-active);
+    }
+
+    .sidebar__nav-item.active::after {
+      content: '';
+      position: absolute;
+      left: -12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 20px;
+      background: var(--accent);
+      border-radius: 0 3px 3px 0;
+      animation: sidebar-ind 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes sidebar-ind {
+      from {
+        opacity: 0;
+        transform: translateY(-50%) scaleY(0.3);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(-50%) scaleY(1);
+      }
+    }
+
+    .sidebar__nav-item svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .sidebar__theme {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--sidebar-icon);
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .sidebar__theme:hover {
+      background: var(--sidebar-hover);
+      color: #fff;
+    }
+
+    .sidebar__theme svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .sidebar__theme .theme-icon-sun {
+      display: none;
+    }
+
+    .sidebar__theme .theme-icon-moon {
+      display: block;
+    }
+
+    [data-theme] .sidebar__theme .theme-icon-sun {
+      display: block;
+    }
+
+    [data-theme] .sidebar__theme .theme-icon-moon {
+      display: none;
+    }
+
+    .sidebar__theme:active {
+      transform: scale(0.92);
+    }
+
+    .sidebar__profile {
+      margin-top: auto;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font: 590 15px/1 var(--font);
+      color: #fff;
+      cursor: pointer;
+      border: 2px solid rgba(255, 255, 255, 0.08);
+      transition: border-color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .sidebar__profile:hover {
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    /* ── Main area ── */
+    .main-area {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-width: 0;
+      position: relative;
+    }
+
+    /* ── Thread List ── */
+    .thread-list {
+      width: 320px;
+      min-width: 320px;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+
+    .thread-list__top {
+      padding: 24px 20px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .thread-list__top h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .thread-list__add {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+
+    .thread-list__add:hover {
+      background: var(--accent-hover);
+    }
+
+    .thread-list__add svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .thread-list__search {
+      margin: 0 16px 16px;
+      position: relative;
+    }
+
+    .thread-list__search svg {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .thread-list__search input {
+      width: 100%;
+      height: 40px;
+      padding: 0 14px 0 38px;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text-primary);
+      font: 400 14px/1 var(--font);
+      outline: none;
+    }
+
+    .thread-list__search input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .thread-list__sections {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 12px 12px;
+    }
+
+    .thread-section__label {
+      padding: 8px 8px 6px;
+      font-size: 11px;
+      font-weight: 590;
+      color: var(--text-muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .thread-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 10px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .thread-item:hover {
+      background: var(--surface-hover);
+    }
+
+    .thread-item.active {
+      background: var(--surface-hover);
+    }
+
+    .thread-item__avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      font-weight: 590;
+      color: #fff;
+      position: relative;
+    }
+
+    .thread-item__avatar .status-ring {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+      background: var(--success);
+    }
+
+    .thread-item__body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .thread-item__top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .thread-item__name {
+      font-size: 15px;
+      font-weight: 590;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .thread-item__time {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      margin-left: 8px;
+    }
+
+    .thread-item__preview {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .thread-item__meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .thread-item__unread {
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 590;
+      border-radius: var(--radius-full);
+      display: grid;
+      place-items: center;
+    }
+
+    /* ── Chat View ── */
+    .chat-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      min-width: 0;
+      position: relative;
+    }
+
+    .chat-view__empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 40px;
+    }
+
+    .chat-view__empty svg {
+      width: 56px;
+      height: 56px;
+      color: var(--border);
+    }
+
+    .chat-view__empty h3 {
+      font-size: 16px;
+      font-weight: 510;
+      color: var(--text-secondary);
+    }
+
+    .chat-view__empty p {
+      font-size: 14px;
+      color: var(--text-muted);
+      text-align: center;
+      max-width: 280px;
+      line-height: 1.5;
+    }
+
+    .chat-view__header {
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      min-height: 64px;
+    }
+
+    .chat-view__header-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 16px;
+      font-weight: 590;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .chat-view__header-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .chat-view__header-name {
+      font-size: 15px;
+      font-weight: 590;
+      color: var(--text-primary);
+    }
+
+    .chat-view__header-status {
+      font-size: 12px;
+      color: var(--success);
+      font-weight: 450;
+    }
+
+    .chat-view__header-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .chat-view__header-btn {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: transparent;
+      color: var(--text-secondary);
+      font: 510 12px/1 var(--font);
+      cursor: pointer;
+      transition: all 0.12s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chat-view__header-btn:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+      border-color: var(--text-muted);
+    }
+
+    .chat-view__header-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .chat-view__messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      scroll-behavior: smooth;
+    }
+
+    .chat-view__date {
+      text-align: center;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      padding: 16px 0 12px;
+      letter-spacing: 0.03em;
+    }
+
+    .message-row {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .message-row--sent {
+      align-items: flex-end;
+    }
+
+    .message-row--received {
+      align-items: flex-start;
+    }
+
+    .message-bubble {
+      max-width: 65%;
+      padding: 10px 16px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.5;
+      word-wrap: break-word;
+      position: relative;
+    }
+
+    .message-bubble--sent {
+      background: var(--accent);
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message-bubble--received {
+      background: var(--surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+
+    .message-bubble__time {
+      font-size: 10px;
+      opacity: 0.55;
+      margin-top: 4px;
+      text-align: right;
+      letter-spacing: 0.02em;
+    }
+
+    .message-bubble--received .message-bubble__time {
+      color: var(--text-muted);
+    }
+
+    .message-bubble--file {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 240px;
+    }
+
+    .file-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 0;
+    }
+
+    .file-card__icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      display: grid;
+      place-items: center;
+      background: rgba(255, 255, 255, 0.12);
+      flex-shrink: 0;
+    }
+
+    .message-bubble--received .file-card__icon {
+      background: var(--bg);
+    }
+
+    .file-card__icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .message-bubble--sent .file-card__icon svg {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .message-bubble--received .file-card__icon svg {
+      color: var(--accent);
+    }
+
+    .file-card__info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .file-card__name {
+      font-size: 13px;
+      font-weight: 510;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-card__size {
+      font-size: 11px;
+      opacity: 0.6;
+    }
+
+    .file-card__action {
+      font-size: 12px;
+      font-weight: 510;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .message-bubble--sent .file-card__action {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .message-bubble--received .file-card__action {
+      color: var(--accent);
+    }
+
+    /* ── Input ── */
+    .input-bar {
+      padding: 16px 20px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .input-bar__btn {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.12s;
+      flex-shrink: 0;
+    }
+
+    .input-bar__btn:hover {
+      background: var(--surface-hover);
+      color: var(--text-secondary);
+    }
+
+    .input-bar__btn svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .input-bar__field {
+      flex: 1;
+      position: relative;
+    }
+
+    .input-bar__field input {
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 24px;
+      background: var(--bg);
+      color: var(--text-primary);
+      font: 400 14px/1.4 var(--font);
+      outline: none;
+    }
+
+    .input-bar__field input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .input-bar__send {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .input-bar__send:hover {
+      background: var(--accent-hover);
+    }
+
+    .input-bar__send:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    .input-bar__send svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* ── Profile Panel ── */
+    .profile-panel {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 320px;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+    }
+
+    .profile-panel.open {
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    .profile-panel__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 20px 0;
+    }
+
+    .profile-panel__header h2 {
+      font-size: 15px;
+      font-weight: 590;
+      color: var(--text-primary);
+    }
+
+    .profile-panel__close {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .profile-panel__close:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    .profile-panel__close svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .profile-panel__body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 20px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .profile-avatar {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 26px;
+      font-weight: 590;
+      color: #fff;
+      margin: 0 auto 4px;
+    }
+
+    .profile-name {
+      text-align: center;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .profile-status {
+      text-align: center;
+      font-size: 12px;
+      color: var(--success);
+      margin-top: 2px;
+    }
+
+    .profile-section {
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+    }
+
+    .profile-section__label {
+      font-size: 11px;
+      font-weight: 590;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .profile-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 13px;
+    }
+
+    .profile-row__label {
+      color: var(--text-secondary);
+    }
+
+    .profile-row__value {
+      color: var(--text-primary);
+      text-align: right;
+      max-width: 60%;
+      word-break: break-all;
+    }
+
+    .profile-row__value--mono {
+      font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .profile-trust {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: var(--radius-full);
+      font-size: 11px;
+      font-weight: 510;
+    }
+
+    .profile-trust--verified {
+      background: rgba(52, 199, 89, 0.10);
+      color: var(--success);
+    }
+
+    .profile-trust--unverified {
+      background: var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .profile-trust svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .profile-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 4px;
+    }
+
+    .profile-actions__btn {
+      padding: 10px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: transparent;
+      color: var(--text-secondary);
+      font: 510 13px/1 var(--font);
+      cursor: pointer;
+      transition: all 0.12s;
+      text-align: center;
+    }
+
+    .profile-actions__btn:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    .profile-actions__btn--danger {
+      color: #FF3B30;
+      border-color: rgba(255, 59, 48, 0.25);
+    }
+
+    .profile-actions__btn--danger:hover {
+      background: rgba(255, 59, 48, 0.06);
+      color: #FF3B30;
+    }
+
+    .profile-fingerprint {
+      font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      word-break: break-all;
+      background: var(--bg);
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+    }
+
+    /* ── Call Overlay ── */
+    .call-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 150;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+      background: var(--sidebar);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .call-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .call-overlay__peer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .call-overlay__avatar {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 28px;
+      font-weight: 600;
+      color: #fff;
+      box-shadow: 0 0 0 0 var(--accent), 0 0 0 0 rgba(232, 106, 51, 0.3);
+      transition: box-shadow 0.3s ease;
+    }
+
+    .call-overlay.is-dialing .call-overlay__avatar {
+      animation: call-pulse 1.2s ease-in-out infinite;
+    }
+
+    @keyframes call-pulse {
+      0% {
+        box-shadow: 0 0 0 0 var(--accent), 0 0 0 0 rgba(232, 106, 51, 0.3);
+      }
+
+      50% {
+        box-shadow: 0 0 0 12px rgba(232, 106, 51, 0), 0 0 0 24px rgba(232, 106, 51, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(232, 106, 51, 0), 0 0 0 0 rgba(232, 106, 51, 0);
+      }
+    }
+
+    .call-overlay__name {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .call-overlay__status {
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .call-overlay__status .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: call-dot-pulse 1s ease-in-out infinite;
+    }
+
+    .call-overlay__status .dot.is-connected {
+      background: var(--success);
+    }
+
+    .call-overlay__status .dot.is-dialing {
+      background: var(--accent);
+    }
+
+    @keyframes call-dot-pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.35;
+      }
+    }
+
+    .call-overlay__timer {
+      font-size: 36px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+      letter-spacing: 0.02em;
+    }
+
+    .call-overlay__controls {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      margin-top: 8px;
+    }
+
+    .call-overlay__btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: none;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      background: var(--surface);
+      color: var(--text-primary);
+      transition: background 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
+    }
+
+    .call-overlay__btn:hover {
+      background: var(--surface-hover);
+      transform: scale(1.05);
+    }
+
+    .call-overlay__btn:active {
+      transform: scale(0.95);
+    }
+
+    .call-overlay__btn svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .call-overlay__btn--end {
+      background: #ff3b30;
+      color: #fff;
+    }
+
+    .call-overlay__btn--end:hover {
+      background: #e0352b;
+    }
+
+    .call-overlay__btn--mute.is-muted {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .call-overlay__btn--disabled {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    .call-overlay__ended-text {
+      font-size: 15px;
+      color: var(--text-muted);
+      animation: fade-slide-up 0.3s ease;
+    }
+
+    /* ── Self Profile Modal ── */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.35);
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .self-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.95);
+      width: 400px;
+      max-width: 90vw;
+      max-height: 85vh;
+      background: var(--surface);
+      border-radius: 16px;
+      z-index: 101;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    }
+
+    .self-modal.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .self-modal__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 0;
+    }
+
+    .self-modal__header h2 {
+      font-size: 16px;
+      font-weight: 590;
+      color: var(--text-primary);
+    }
+
+    .self-modal__close {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .self-modal__close:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    .self-modal__close svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .self-modal__body {
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* ── View All Modal ── */
+    .view-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.96);
+      width: 580px;
+      max-width: 92vw;
+      max-height: 80vh;
+      background: var(--surface);
+      border-radius: 16px;
+      z-index: 101;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    }
+
+    .view-modal.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .view-modal__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 0;
+      flex-shrink: 0;
+    }
+
+    .view-modal__header h2 {
+      font-size: 16px;
+      font-weight: 590;
+      color: var(--text-primary);
+    }
+
+    .view-modal__close {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .view-modal__close:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    .view-modal__close svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .view-modal__body {
+      padding: 20px 24px 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .view-modal__row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      transition: background 0.12s;
+    }
+
+    .view-modal__row:hover {
+      background: var(--surface-hover);
+    }
+
+    .view-modal__icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    .view-modal__icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .view-modal__info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .view-modal__name {
+      font-size: 13px;
+      font-weight: 510;
+      color: var(--text-primary);
+    }
+
+    .view-modal__meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .view-modal__tag {
+      font-size: 10px;
+      font-weight: 510;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      white-space: nowrap;
+    }
+
+    .view-modal__tag--ok {
+      background: rgba(52, 199, 89, 0.10);
+      color: var(--success);
+    }
+
+    .view-modal__tag--sending {
+      background: var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .view-modal__tag--away {
+      background: rgba(255, 149, 0, 0.10);
+      color: #FF9500;
+    }
+
+    .view-modal__size {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .view-modal__peer-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 590;
+      color: #fff;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .view-modal__peer-dot {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 8px;
+      height: 8px;
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+      background: var(--success);
+    }
+
+    .view-modal__peer-dot--offline {
+      background: var(--text-muted);
+    }
+
+    .view-modal__count {
+      font-size: 13px;
+      color: var(--text-muted);
+      padding: 8px 12px 4px;
+    }
+
+    /* ── Peer Discovery Modal ── */
+    .person-modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.96);
+      width: 520px;
+      max-width: 92vw;
+      max-height: 80vh;
+      background: var(--surface);
+      border-radius: 16px;
+      z-index: 101;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    }
+
+    .person-modal.open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    .person-modal__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 22px 0;
+      flex-shrink: 0;
+    }
+
+    .person-modal__header h2 {
+      font-size: 16px;
+      font-weight: 590;
+      color: var(--text-primary);
+    }
+
+    .person-modal__close {
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .person-modal__close:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    .person-modal__close svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .person-modal__search {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 22px;
+      flex-shrink: 0;
+    }
+
+    .person-modal__search-wrap {
+      flex: 1;
+      position: relative;
+    }
+
+    .person-modal__search-wrap input {
+      width: 100%;
+      height: 38px;
+      padding: 0 14px 0 36px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      background: var(--bg);
+      color: var(--text-primary);
+      font: 400 13px/1 var(--font);
+      outline: none;
+      transition: border-color 0.12s;
+    }
+
+    .person-modal__search-wrap input:focus {
+      border-color: var(--accent);
+    }
+
+    .person-modal__search-wrap input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .person-modal__search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .person-modal__refresh {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.12s;
+      flex-shrink: 0;
+    }
+
+    .person-modal__refresh:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    .person-modal__refresh svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .person-modal__refresh.is-loading svg {
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .person-modal__list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-height: 0;
+    }
+
+    .person-modal__list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .person-modal__list::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .person-modal__list::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .person-modal__peer {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .person-modal__peer:hover {
+      background: var(--bg);
+    }
+
+    .person-modal__peer-avatar {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      font-weight: 590;
+      color: #fff;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .person-modal__peer-avatar .status-dot {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid var(--surface);
+    }
+
+    .person-modal__peer-avatar .status-dot.online {
+      background: var(--success);
+    }
+
+    .person-modal__peer-avatar .status-dot.offline {
+      background: var(--text-muted);
+    }
+
+    .person-modal__peer-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .person-modal__peer-name {
+      font-size: 13px;
+      font-weight: 510;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .person-modal__peer-host {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .person-modal__peer-action {
+      padding: 6px 14px;
+      border-radius: 14px;
+      border: none;
+      font: 510 12px/1 var(--font);
+      cursor: pointer;
+      transition: all 0.12s;
+      flex-shrink: 0;
+    }
+
+    .person-modal__peer-action.connect {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .person-modal__peer-action.connect:hover {
+      background: var(--accent-hover);
+    }
+
+    .person-modal__peer-action.connected {
+      background: var(--success);
+      color: #fff;
+      opacity: 0.7;
+      cursor: default;
+    }
+
+    .person-modal__empty {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .person-modal__empty svg {
+      width: 36px;
+      height: 36px;
+      margin-bottom: 10px;
+      opacity: 0.35;
+    }
+
+    /* ── Toast ── */
+    .toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 10px 18px;
+      background: var(--sidebar);
+      color: #fff;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 450;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+      animation: toast-in 0.25s ease-out;
+    }
+
+    @keyframes toast-in {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ── Motion language ── */
+    @keyframes fade-slide-up {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes scale-pulse {
+      0% {
+        transform: scale(1);
+      }
+
+      40% {
+        transform: scale(0.92);
+      }
+
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    .animate-in {
+      animation: fade-slide-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    /* ── Dashboard ── */
+    .dashboard {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+      background: var(--bg);
+      min-width: 0;
+    }
+
+    .dashboard.visible {
+      display: block;
+    }
+
+    .dashboard__header {
+      margin-bottom: 24px;
+    }
+
+    .dashboard__header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .dashboard__header p {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ── Profile row ── */
+    .d-profile {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 24px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+
+    .d-profile__avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 22px;
+      font-weight: 590;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .d-profile__info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .d-profile__name {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .d-profile__meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 2px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .d-profile__badge {
+      padding: 2px 8px;
+      background: var(--accent-glow);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 510;
+      border-radius: var(--radius-full);
+      letter-spacing: 0.03em;
+    }
+
+    .d-profile__fingerprint {
+      font-family: 'SF Mono', ui-monospace, Menlo, monospace;
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 0.03em;
+    }
+
+    /* ── Stats grid ── */
+    .d-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .d-stat {
+      padding: 18px 20px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+
+    .d-stat__top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .d-stat__icon {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+    }
+
+    .d-stat__icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .d-stat__value {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .d-stat__label {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Two-column content ── */
+    .d-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .d-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 20px;
+    }
+
+    .d-card__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .d-card__header h2 {
+      font-size: 15px;
+      font-weight: 590;
+      color: var(--text-primary);
+    }
+
+    .d-card__link {
+      font-size: 12px;
+      font-weight: 510;
+      color: var(--accent);
+      cursor: pointer;
+      border: none;
+      background: none;
+    }
+
+    .d-card__link:hover {
+      color: var(--accent-hover);
+    }
+
+    /* Recent files list */
+    .d-file {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .d-file:last-child {
+      border-bottom: none;
+    }
+
+    .d-file__icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    .d-file__icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .d-file__info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .d-file__name {
+      font-size: 13px;
+      font-weight: 510;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .d-file__meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .d-file__status {
+      font-size: 11px;
+      font-weight: 510;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+      white-space: nowrap;
+    }
+
+    .d-file__status--ok {
+      background: rgba(52, 199, 89, 0.10);
+      color: var(--success);
+    }
+
+    .d-file__status--sending {
+      background: var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .d-file__size {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* Active peers grid */
+    .d-peers-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .d-peer {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      transition: background 0.12s;
+      cursor: pointer;
+    }
+
+    .d-peer:hover {
+      background: var(--surface-hover);
+    }
+
+    .d-peer__avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 590;
+      color: #fff;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .d-peer__dot {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--surface);
+      border-radius: 50%;
+      background: var(--success);
+    }
+
+    .d-peer__info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .d-peer__name {
+      font-size: 13px;
+      font-weight: 510;
+      color: var(--text-primary);
+    }
+
+    .d-peer__meta {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* ── Activity timeline ── */
+    .d-activity {
+      background: var(--surface);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      padding: 20px;
+    }
+
+    .d-activity__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .d-activity__header h2 {
+      font-size: 15px;
+      font-weight: 590;
+      color: var(--text-primary);
+    }
+
+    .d-timeline {
+      padding: 0;
+    }
+
+    .d-event {
+      display: flex;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .d-event:last-child {
+      border-bottom: none;
+    }
+
+    .d-event__line {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 20px;
+      flex-shrink: 0;
+    }
+
+    .d-event__dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 4px;
+    }
+
+    .d-event__line::after {
+      content: '';
+      width: 1px;
+      flex: 1;
+      background: var(--border);
+      margin-top: 4px;
+    }
+
+    .d-event:last-child .d-event__line::after {
+      display: none;
+    }
+
+    .d-event__body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .d-event__text {
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .d-event__text strong {
+      font-weight: 590;
+    }
+
+    .d-event__time {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Notification View ── */
+    .notif-view {
+      display: none;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .notif-view.visible {
+      display: flex;
+    }
+
+    .notif-list {
+      width: 320px;
+      min-width: 320px;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+
+    .notif-list__top {
+      padding: 24px 20px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .notif-list__top h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .notif-list__clear {
+      font-size: 12px;
+      font-weight: 510;
+      color: var(--accent);
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      transition: background 0.12s;
+    }
+
+    .notif-list__clear:hover {
+      background: var(--accent-glow);
+    }
+
+    .notif-list__filter {
+      display: flex;
+      gap: 4px;
+      padding: 0 16px 12px;
+    }
+
+    .notif-list__filter-btn {
+      padding: 6px 14px;
+      border: none;
+      border-radius: var(--radius-full);
+      background: transparent;
+      color: var(--text-secondary);
+      font: 510 12px/1 var(--font);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .notif-list__filter-btn:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    .notif-list__filter-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .notif-list__items {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 8px 12px;
+    }
+
+    .notif-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 10px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background 0.12s;
+      position: relative;
+    }
+
+    .notif-item:hover {
+      background: var(--surface-hover);
+    }
+
+    .notif-item.selected {
+      background: var(--surface-hover);
+    }
+
+    .notif-item--unread {
+      background: var(--accent-glow);
+    }
+
+    .notif-item--unread:hover {
+      background: rgba(232, 106, 51, 0.08);
+    }
+
+    .notif-item--unread.selected {
+      background: rgba(232, 106, 51, 0.10);
+    }
+
+    .notif-item__dot {
+      position: absolute;
+      left: 4px;
+      top: 18px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .notif-item__icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .notif-item__icon svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .notif-item__body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .notif-item__title {
+      font-size: 13px;
+      font-weight: 510;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .notif-item__preview {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .notif-item__time {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .notif-item__action {
+      width: 24px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      flex-shrink: 0;
+      opacity: 0;
+      transition: all 0.12s;
+      margin-top: 6px;
+    }
+
+    .notif-item:hover .notif-item__action {
+      opacity: 1;
+    }
+
+    .notif-item__action:hover {
+      background: var(--surface);
+      color: var(--text-secondary);
+    }
+
+    .notif-item__action svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .notif-list__empty {
+      padding: 40px 20px;
+      text-align: center;
+    }
+
+    .notif-list__empty svg {
+      width: 40px;
+      height: 40px;
+      color: var(--border);
+      margin-bottom: 12px;
+    }
+
+    .notif-list__empty h3 {
+      font-size: 15px;
+      font-weight: 510;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .notif-list__empty p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .notif-detail {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      min-width: 0;
+    }
+
+    .notif-detail__empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 40px;
+    }
+
+    .notif-detail__empty svg {
+      width: 48px;
+      height: 48px;
+      color: var(--border);
+    }
+
+    .notif-detail__empty h3 {
+      font-size: 15px;
+      font-weight: 510;
+      color: var(--text-secondary);
+    }
+
+    .notif-detail__empty p {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+      max-width: 280px;
+    }
+
+    .notif-detail__content {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+    }
+
+    .notif-detail__content.visible {
+      display: block;
+    }
+
+    .notif-detail__icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      margin-bottom: 16px;
+    }
+
+    .notif-detail__icon svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .notif-detail__type {
+      font-size: 12px;
+      font-weight: 510;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .notif-detail__title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    .notif-detail__preview {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .notif-detail__time {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    .notif-detail__actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .notif-detail__btn {
+      padding: 8px 20px;
+      border-radius: 20px;
+      font: 510 13px/1 var(--font);
+      cursor: pointer;
+      border: none;
+      transition: all 0.12s;
+    }
+
+    .notif-detail__btn--primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .notif-detail__btn--primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .notif-detail__btn--secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .notif-detail__btn--secondary:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    .sidebar__nav-item .notif-badge {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 590;
+      border-radius: var(--radius-full);
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+
+    /* ── Trash View ── */
+    .trash-view {
+      display: none;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .trash-view.visible {
+      display: flex;
+    }
+
+    .trash-list {
+      width: 320px;
+      min-width: 320px;
+      display: flex;
+      flex-direction: column;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+
+    .trash-list__top {
+      padding: 24px 20px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .trash-list__top h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .trash-list__empty {
+      padding: 12px 8px;
+    }
+
+    .trash-list__clear {
+      font-size: 12px;
+      font-weight: 510;
+      color: var(--accent);
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      transition: background 0.12s;
+    }
+
+    .trash-list__clear:hover {
+      background: var(--accent-glow);
+    }
+
+    .trash-list__filter {
+      display: flex;
+      gap: 4px;
+      padding: 0 16px 12px;
+    }
+
+    .trash-list__filter-btn {
+      padding: 6px 14px;
+      border: none;
+      border-radius: var(--radius-full);
+      background: transparent;
+      color: var(--text-secondary);
+      font: 510 12px/1 var(--font);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .trash-list__filter-btn:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    .trash-list__filter-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .trash-list__items {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 8px 12px;
+    }
+
+    .trash-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 10px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .trash-item:hover {
+      background: var(--surface-hover);
+    }
+
+    .trash-item.selected {
+      background: var(--surface-hover);
+    }
+
+    .trash-item__icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .trash-item__icon svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .trash-item__body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .trash-item__title {
+      font-size: 13px;
+      font-weight: 510;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+
+    .trash-item__preview {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .trash-item__meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .trash-item__tag {
+      font-size: 10px;
+      font-weight: 510;
+      padding: 1px 6px;
+      border-radius: var(--radius-full);
+      letter-spacing: 0.04em;
+    }
+
+    .trash-item__tag--conv {
+      background: var(--accent-glow);
+      color: var(--accent);
+    }
+
+    .trash-item__tag--file {
+      background: rgba(79, 125, 243, 0.10);
+      color: #4F7DF3;
+    }
+
+    .trash-item__time {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .trash-list__empty-state {
+      padding: 40px 20px;
+      text-align: center;
+    }
+
+    .trash-list__empty-state svg {
+      width: 40px;
+      height: 40px;
+      color: var(--border);
+      margin-bottom: 12px;
+    }
+
+    .trash-list__empty-state h3 {
+      font-size: 15px;
+      font-weight: 510;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .trash-list__empty-state p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .trash-detail {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      min-width: 0;
+    }
+
+    .trash-detail__empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 40px;
+    }
+
+    .trash-detail__empty svg {
+      width: 48px;
+      height: 48px;
+      color: var(--border);
+    }
+
+    .trash-detail__empty h3 {
+      font-size: 15px;
+      font-weight: 510;
+      color: var(--text-secondary);
+    }
+
+    .trash-detail__empty p {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+      max-width: 280px;
+    }
+
+    .trash-detail__content {
+      display: none;
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px;
+    }
+
+    .trash-detail__content.visible {
+      display: block;
+    }
+
+    .trash-detail__icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      margin-bottom: 16px;
+    }
+
+    .trash-detail__icon svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .trash-detail__type {
+      font-size: 12px;
+      font-weight: 510;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .trash-detail__title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    .trash-detail__preview {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin-bottom: 8px;
+    }
+
+    .trash-detail__info {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .trash-detail__actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .trash-detail__btn {
+      padding: 8px 20px;
+      border-radius: 20px;
+      font: 510 13px/1 var(--font);
+      cursor: pointer;
+      border: none;
+      transition: all 0.12s;
+    }
+
+    .trash-detail__btn--primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .trash-detail__btn--primary:hover {
+      background: var(--accent-hover);
+    }
+
+    .trash-detail__btn--secondary {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .trash-detail__btn--secondary:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+
+    .trash-detail__btn--danger {
+      background: transparent;
+      color: #FF3B30;
+      border: 1px solid rgba(255, 59, 48, 0.3);
+    }
+
+    .trash-detail__btn--danger:hover {
+      background: rgba(255, 59, 48, 0.08);
+    }
+
+    /* ── Transfer Progress ── */
+    .transfer-progress {
+      padding: 10px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .transfer-progress__info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .transfer-progress__name {
+      font-weight: 510;
+      color: var(--text-primary);
+    }
+
+    .transfer-progress__speed {
+      color: var(--text-muted);
+    }
+
+    .transfer-progress__bar {
+      height: 4px;
+      background: var(--bg);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .transfer-progress__fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <nav class="sidebar" data-od-id="sidebar">
+      <div class="sidebar__logo">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0l3.5 8.5L24 12l-8.5 3.5L12 24l-3.5-8.5L0 12l8.5-3.5L12 0z"></path>
+        </svg>
+      </div>
+      <div class="sidebar__nav">
+        <button class="sidebar__nav-item" data-od-id="nav-dashboard" title="Dashboard" aria-label="Dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+            stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+        </button>
+        <button class="sidebar__nav-item active" data-od-id="nav-messages" title="Messages" aria-label="Messages">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </button>
+        <button class="sidebar__nav-item" data-od-id="nav-notification" title="Notification" aria-label="Notification">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span class="notif-badge" id="nav-notif-badge" style="display:none;">0</span>
+        </button>
+        <button class="sidebar__nav-item" data-od-id="nav-trash" title="Trash" aria-label="Trash">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+            stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
+        </button>
+      </div>
+      <button class="sidebar__theme" id="theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+      <button class="sidebar__profile" style="background:#E86A33;">AR</button>
+    </nav>
+
+    <!-- Main area -->
+    <div class="main-area">
+      <!-- Thread List -->
+      <section class="thread-list" data-od-id="thread-list">
+        <div class="thread-list__top">
+          <h1>Chat</h1>
+          <button class="thread-list__add" aria-label="New chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="thread-list__search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <path d="M21 21l-4.35-4.35"></path>
+          </svg>
+          <input type="text" id="search-input" placeholder="Search or start new chat" aria-label="Search chats">
+        </div>
+        <div class="thread-list__sections" id="thread-sections">
+          <!-- Injected by JS -->
+        </div>
+      </section>
+
+      <!-- Dashboard -->
+      <div class="dashboard" id="dashboard" data-od-id="dashboard">
+        <div class="dashboard__header">
+          <h1>Dashboard</h1>
+          <p id="d-greeting">Welcome back, Alex.</p>
+        </div>
+
+        <!-- Profile -->
+        <div class="d-profile" data-od-id="profile-card">
+          <div class="d-profile__avatar" style="background:#E86A33;">AR</div>
+          <div class="d-profile__info">
+            <div class="d-profile__name">Alex Rivera</div>
+            <div class="d-profile__meta">
+              <span class="d-profile__badge">Online</span>
+              <span>4 peers connected</span>
+              <span class="d-profile__fingerprint">a3:f9:b2:7d:4e:81:c0:5a</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="d-stats" data-od-id="stats-grid">
+          <div class="d-stat" data-od-id="stat-transfers">
+            <div class="d-stat__top">
+              <div class="d-stat__icon" style="background:var(--accent-glow);color:var(--accent);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+              </div>
+            </div>
+            <div class="d-stat__value">42</div>
+            <div class="d-stat__label">Total Transfers</div>
+          </div>
+          <div class="d-stat" data-od-id="stat-peers">
+            <div class="d-stat__top">
+              <div class="d-stat__icon" style="background:var(--accent-glow);color:var(--accent);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="d-stat__value">4</div>
+            <div class="d-stat__label">Peers Connected</div>
+          </div>
+          <div class="d-stat" data-od-id="stat-files">
+            <div class="d-stat__top">
+              <div class="d-stat__icon" style="background:var(--accent-glow);color:var(--accent);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                  <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+              </div>
+            </div>
+            <div class="d-stat__value">156</div>
+            <div class="d-stat__label">Files Shared</div>
+          </div>
+          <div class="d-stat" data-od-id="stat-uptime">
+            <div class="d-stat__top">
+              <div class="d-stat__icon" style="background:var(--accent-glow);color:var(--accent);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+              </div>
+            </div>
+            <div class="d-stat__value">12h 34m</div>
+            <div class="d-stat__label">Session Uptime</div>
+          </div>
+        </div>
+
+        <!-- Two-column: Recent files + Active peers -->
+        <div class="d-grid">
+          <div class="d-card" data-od-id="recent-files">
+            <div class="d-card__header">
+              <h2>Recent Files</h2>
+              <button class="d-card__link" data-view="files">View All</button>
+            </div>
+            <div id="d-file-list">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+          <div class="d-card" data-od-id="active-peers">
+            <div class="d-card__header">
+              <h2>Active Peers</h2>
+              <button class="d-card__link" data-view="peers">View All</button>
+            </div>
+            <div class="d-peers-grid" id="d-peer-grid">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity timeline -->
+        <div class="d-activity" data-od-id="activity-timeline">
+          <div class="d-activity__header">
+            <h2>Recent Activity</h2>
+            <button class="d-card__link" data-view="activity">View All</button>
+          </div>
+          <div class="d-timeline" id="d-timeline">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification View -->
+      <div class="notif-view" id="notif-view" data-od-id="notif-view">
+        <div class="notif-list">
+          <div class="notif-list__top">
+            <h1>Notifications</h1>
+            <button class="notif-list__clear" id="notif-clear-all">Mark All Read</button>
+          </div>
+          <div class="notif-list__filter">
+            <button class="notif-list__filter-btn active" data-filter="all">All</button>
+            <button class="notif-list__filter-btn" data-filter="unread">Unread</button>
+          </div>
+          <div class="notif-list__items" id="notif-items">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+        <div class="notif-detail">
+          <div class="notif-detail__empty" id="notif-empty" style="display:flex;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+            <h3>No notification selected</h3>
+            <p>Pick one from the list to view details.</p>
+          </div>
+          <div class="notif-detail__content" id="notif-detail-content">
+          </div>
+        </div>
+      </div>
+
+      <!-- Trash View -->
+      <div class="trash-view" id="trash-view" data-od-id="trash-view">
+        <div class="trash-list">
+          <div class="trash-list__top">
+            <h1>Trash</h1>
+            <button class="trash-list__clear" id="trash-empty-all">Empty Trash</button>
+          </div>
+          <div class="trash-list__filter">
+            <button class="trash-list__filter-btn active" data-filter="all">All</button>
+            <button class="trash-list__filter-btn" data-filter="conversation">Conversations</button>
+            <button class="trash-list__filter-btn" data-filter="file">Files</button>
+          </div>
+          <div class="trash-list__items" id="trash-items">
+            <!-- Injected by JS -->
+          </div>
+        </div>
+        <div class="trash-detail">
+          <div class="trash-detail__empty" id="trash-empty" style="display:flex;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+            <h3>No item selected</h3>
+            <p>Select a trashed item from the list.</p>
+          </div>
+          <div class="trash-detail__content" id="trash-detail-content">
+          </div>
+        </div>
+      </div>
+
+      <!-- Chat View -->
+      <main class="chat-view" id="chat-view" data-od-id="chat-view">
+        <!-- Header -->
+        <div class="chat-view__header" id="chat-header" style="display:none;" data-od-id="chat-header">
+          <div class="chat-view__header-avatar" id="chat-avatar" style="background:#34C759;">M</div>
+          <div class="chat-view__header-info">
+            <div class="chat-view__header-name" id="chat-name">Marcus Chen</div>
+            <div class="chat-view__header-status">● Online</div>
+          </div>
+          <div class="chat-view__header-actions">
+            <button class="chat-view__header-btn" id="btn-profile" data-od-id="btn-profile">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              Profile
+            </button>
+            <button class="chat-view__header-btn" data-od-id="btn-call">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path
+                  d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z">
+                </path>
+              </svg>
+              Call
+            </button>
+          </div>
+        </div>
+
+        <!-- Transfer progress -->
+        <div class="transfer-progress" id="transfer-progress" style="display:none;" data-od-id="transfer-progress">
+          <div class="transfer-progress__info">
+            <span class="transfer-progress__name" id="transfer-name">design-mockups.zip</span>
+            <span class="transfer-progress__speed" id="transfer-speed">12.4 MB/s</span>
+          </div>
+          <div class="transfer-progress__bar">
+            <div class="transfer-progress__fill" id="transfer-fill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="chat-view__messages" id="chat-messages" data-od-id="chat-messages">
+          <div class="chat-view__empty animate-in" id="chat-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <h3>No conversation selected</h3>
+            <p>Pick a chat or search for peers on your network.</p>
+          </div>
+        </div>
+
+        <!-- Input -->
+        <div class="input-bar" id="input-bar" style="display:none;" data-od-id="input-bar">
+          <button class="input-bar__btn" id="btn-attach" aria-label="Attach file">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path
+                d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48">
+              </path>
+            </svg>
+          </button>
+          <div class="input-bar__field">
+            <input type="text" id="chat-input" placeholder="Write messages..." aria-label="Type a message">
+          </div>
+          <button class="input-bar__btn" aria-label="Add emoji">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+              <line x1="9" y1="9" x2="9.01" y2="9"></line>
+              <line x1="15" y1="9" x2="15.01" y2="9"></line>
+            </svg>
+          </button>
+          <button class="input-bar__btn" id="btn-record" aria-label="Record voice">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="22"></line>
+            </svg>
+          </button>
+          <button class="input-bar__send" id="btn-send" disabled="" aria-label="Send message">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Call Overlay -->
+        <div class="call-overlay" id="call-overlay">
+          <div class="call-overlay__peer">
+            <div class="call-overlay__avatar" id="call-avatar" style="background:#34C759;">M</div>
+            <div class="call-overlay__name" id="call-name">Marcus Chen</div>
+            <div class="call-overlay__status" id="call-status">
+              <span class="dot is-dialing"></span>
+              <span id="call-status-text">Calling...</span>
+            </div>
+          </div>
+          <div class="call-overlay__timer" id="call-timer" style="display:none;">00:00</div>
+          <div class="call-overlay__controls">
+            <button class="call-overlay__btn call-overlay__btn--mute" id="call-mute" aria-label="Mute">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z" />
+                <line x1="19" y1="10" x2="19" y2="12a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="22" />
+              </svg>
+            </button>
+            <button class="call-overlay__btn call-overlay__btn--end" id="call-end" aria-label="End call">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path
+                  d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </main>
+      <aside class="profile-panel" id="profile-panel" data-od-id="profile-panel">
+        <div class="profile-panel__header">
+          <h2>Profile</h2>
+          <button class="profile-panel__close" id="profile-close" aria-label="Close profile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="profile-panel__body" id="profile-body"></div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="self-backdrop"></div>
+  <div class="self-modal" id="self-modal" data-od-id="self-modal">
+    <div class="self-modal__header">
+      <h2>My Profile</h2>
+      <button class="self-modal__close" id="self-modal-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="self-modal__body" id="self-modal-body"></div>
+  </div>
+
+  <div class="modal-backdrop" id="view-backdrop"></div>
+  <div class="view-modal" id="view-modal">
+    <div class="view-modal__header">
+      <h2 id="view-modal-title">View All</h2>
+      <button class="view-modal__close" id="view-modal-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="view-modal__body" id="view-modal-body"></div>
+  </div>
+
+  <div class="modal-backdrop" id="person-backdrop"></div>
+  <div class="person-modal" id="person-modal">
+    <div class="person-modal__header">
+      <h2>Discover Peers</h2>
+      <button class="person-modal__close" id="person-modal-close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <div class="person-modal__search">
+      <div class="person-modal__search-wrap">
+        <svg class="person-modal__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" id="person-search" placeholder="Search peers on network..." autocomplete="off">
+      </div>
+      <button class="person-modal__refresh" id="person-refresh" aria-label="Refresh">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="person-modal__list" id="person-list"></div>
+  </div>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var COLORS = ['#E86A33', '#34C759', '#4F7DF3', '#AF52DE', '#5AC8FA', '#FF6482', '#FF9500', '#00C7BE'];
+
+      var threads = [
+        { id: 'p1', name: 'Priya Sharma', initials: 'PS', pinned: true, online: true, color: '#4F7DF3', time: '12:34', preview: 'Sounds good, I\'ll review the mockups tonight', unread: 2 },
+        { id: 'p2', name: 'Marcus Chen', initials: 'MC', pinned: true, online: true, color: '#34C759', time: '11:52', preview: 'Can you send me the latest build?', unread: 0 },
+        { id: 'p3', name: 'Sasha Volkov', initials: 'SV', pinned: false, online: true, color: '#AF52DE', time: '11:20', preview: 'Hey! I saw Aria on your laptop. Is this the P2P tool?', unread: 1 },
+        { id: 'p4', name: 'Dr. Elena Voss', initials: 'EV', pinned: false, online: true, color: '#5AC8FA', time: '10:45', preview: 'Confirmed. All files received on my end.', unread: 0 },
+        { id: 'p5', name: 'Tom Bradley', initials: 'TB', pinned: false, online: false, color: '#FF6482', time: '09:12', preview: 'Let me know when you\'re back online', unread: 0 },
+        { id: 'p6', name: 'Bella Huffman', initials: 'BH', pinned: false, online: true, color: '#E86A33', time: '08:30', preview: 'Here is the updated schedule for this week', unread: 3 }
+      ];
+
+      var messages = {
+        'p1': [
+          { type: 'text', content: 'Hey Priya, sent you the latest mockups for the dashboard redesign.', sender: 'me', time: '11:45' },
+          { type: 'text', content: 'Thanks Alex! Let me pull them up now.', sender: 'them', time: '11:47' },
+          { type: 'file', name: 'dashboard-v3.fig', size: '4.2 MB', sender: 'me', time: '11:50' },
+          { type: 'text', content: 'I moved the analytics panel to the right sidebar and cleaned up the data table spacing. Let me know what you think.', sender: 'me', time: '11:51' },
+          { type: 'text', content: 'Sounds good, I\'ll review the mockups tonight 👍', sender: 'them', time: '12:05' },
+          { type: 'text', content: 'Also, the file transfer speed is incredible. Full mockup in under 2 seconds.', sender: 'them', time: '12:06' },
+          { type: 'text', content: 'Right? That\'s the LAN direct pipe. No cloud upload bottleneck.', sender: 'me', time: '12:08' }
+        ],
+        'p2': [
+          { type: 'text', content: 'Hey Marcus, do you have the latest build ready?', sender: 'me', time: '11:48' },
+          { type: 'text', content: 'Almost done, just finishing up the network layer refactor. Give me 10 min.', sender: 'them', time: '11:49' },
+          { type: 'text', content: 'Can you send me the latest build?', sender: 'them', time: '11:52' }
+        ],
+        'p3': [
+          { type: 'text', content: 'Hey! I saw Aria on your laptop. Is this the P2P tool?', sender: 'them', time: '11:20' },
+          { type: 'text', content: 'Yes! It\'s a local network messenger I\'ve been building. Zero config, direct device-to-device.', sender: 'me', time: '11:22' }
+        ],
+        'p6': [
+          { type: 'text', content: 'Hi Alex, here is the updated team schedule for this week.', sender: 'them', time: '08:30' },
+          { type: 'file', name: 'team-schedule-v2.pdf', size: '2.1 MB', sender: 'them', time: '08:30' },
+          { type: 'text', content: 'Thanks Bella! The new shift allocations look good.', sender: 'me', time: '08:45' }
+        ]
+      };
+
+      var state = { activeId: 'p6', transferActive: false };
+      var sectionsEl = document.getElementById('thread-sections');
+      var chatMessages = document.getElementById('chat-messages');
+      var chatEmpty = document.getElementById('chat-empty');
+      var chatHeader = document.getElementById('chat-header');
+      var inputBar = document.getElementById('input-bar');
+      var chatInput = document.getElementById('chat-input');
+      var btnSend = document.getElementById('btn-send');
+      var toastContainer = document.getElementById('toast-container');
+
+      // ── Notification data ──
+      var notifications = [
+        { id: 'n1', type: 'message', title: 'Priya Sharma', preview: 'Sounds good, I\'ll review the mockups tonight 👍', time: '12:34 PM', read: false, relatedId: 'p1', person: 'Priya Sharma' },
+        { id: 'n2', type: 'file_in', title: 'File received', preview: 'team-schedule-v2.pdf from Bella Huffman', time: '11:20 AM', read: false, relatedId: 'p6', person: 'Bella Huffman' },
+        { id: 'n3', type: 'peer_on', title: 'Peer connected', preview: 'Tom Bradley · tom-linux.local', time: '11:15 AM', read: false },
+        { id: 'n4', type: 'transfer', title: 'Transfer complete', preview: 'dashboard-v3.fig sent to Priya Sharma', time: '10:50 AM', read: true },
+        { id: 'n5', type: 'file_out', title: 'File sent', preview: 'project-brief.pdf to Sasha Volkov', time: '10:45 AM', read: true },
+        { id: 'n6', type: 'peer_off', title: 'Peer disconnected', preview: 'Tom Bradley left the network', time: '09:22 AM', read: true },
+        { id: 'n7', type: 'system', title: 'Session started', preview: 'Aria began at 08:00 AM', time: '08:00 AM', read: true },
+        { id: 'n8', type: 'message', title: 'Sasha Volkov', preview: 'Hey! I saw Aria on your laptop…', time: '11:20 AM', read: true, relatedId: 'p3', person: 'Sasha Volkov' }
+      ];
+
+      var notifViewEl = document.getElementById('notif-view');
+      var notifItemsEl = document.getElementById('notif-items');
+      var notifEmptyEl = document.getElementById('notif-empty');
+      var notifDetailContent = document.getElementById('notif-detail-content');
+      var notifBadge = document.getElementById('nav-notif-badge');
+      var selectedNotifId = null;
+      var notifFilter = 'all';
+
+      function getNotifIcon(type) {
+        var paths = {
+          message: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+          file_in: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3',
+          file_out: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5-5 5 5 M12 3v12',
+          peer_on: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
+          peer_off: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8',
+          transfer: 'M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4v6h-6 M12 8v8 M8 12h8',
+          system: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z M12 16v-4 M12 8h.01'
+        };
+        return paths[type] || paths.system;
+      }
+
+      function getNotifColor(type) {
+        var colors = { message: '#4F7DF3', file_in: '#34C759', file_out: '#E86A33', peer_on: '#34C759', peer_off: '#FF9500', transfer: '#34C759', system: '#5AC8FA' };
+        return colors[type] || '#5AC8FA';
+      }
+
+      function getNotifTypeLabel(type) {
+        var labels = { message: 'New message', file_in: 'File received', file_out: 'File sent', peer_on: 'Peer connected', peer_off: 'Peer disconnected', transfer: 'Transfer complete', system: 'System' };
+        return labels[type] || 'Notification';
+      }
+
+      function updateNotifBadge() {
+        var count = notifications.filter(function (n) { return !n.read; }).length;
+        if (notifBadge) {
+          notifBadge.textContent = count;
+          notifBadge.style.display = count > 0 ? '' : 'none';
+        }
+      }
+
+      function renderNotifications() {
+        var filtered = notifications.filter(function (n) { return notifFilter === 'all' || (notifFilter === 'unread' && !n.read); });
+        var html = '';
+        if (filtered.length === 0) {
+          var msg = notifFilter === 'unread' ? 'No unread notifications' : 'No notifications yet';
+          html = '<div class="notif-list__empty animate-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><h3>' + msg + '</h3></div>';
+          notifItemsEl.innerHTML = html;
+          notifEmptyEl.style.display = 'flex';
+          notifDetailContent.classList.remove('visible');
+          return;
+        }
+        filtered.forEach(function (n) {
+          var selected = selectedNotifId === n.id ? ' selected' : '';
+          var unread = n.read ? '' : ' notif-item--unread';
+          var dot = !n.read ? '<span class="notif-item__dot"></span>' : '';
+          var color = getNotifColor(n.type);
+          var path = getNotifIcon(n.type);
+          html += '<div class="notif-item' + selected + unread + '" data-id="' + n.id + '">' +
+            dot +
+            '<div class="notif-item__icon" style="background:' + color + '20;color:' + color + ';">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg>' +
+            '</div>' +
+            '<div class="notif-item__body">' +
+            '<div class="notif-item__title">' + n.title + '</div>' +
+            '<div class="notif-item__preview">' + n.preview + '</div>' +
+            '</div>' +
+            '<span class="notif-item__time">' + n.time + '</span>' +
+            '<button class="notif-item__action" data-action="dismiss" title="Dismiss">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+            '</button>' +
+            '</div>';
+        });
+        notifItemsEl.innerHTML = html;
+      }
+
+      function renderNotifDetail(id) {
+        var n = notifications.find(function (x) { return x.id === id; });
+        if (!n) {
+          notifEmptyEl.style.display = 'flex';
+          notifDetailContent.classList.remove('visible');
+          return;
+        }
+        if (!n.read) {
+          n.read = true;
+          updateNotifBadge();
+          renderNotifications();
+        }
+        notifEmptyEl.style.display = 'none';
+        notifDetailContent.classList.add('visible');
+        requestAnimationFrame(function () {
+          notifDetailContent.style.animation = 'fade-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both';
+        });
+        var color = getNotifColor(n.type);
+        var path = getNotifIcon(n.type);
+        var typeLabel = getNotifTypeLabel(n.type);
+        var actionBtn = '';
+        if (n.relatedId) {
+          actionBtn = '<button class="notif-detail__btn notif-detail__btn--primary" data-action="open-chat" data-id="' + n.relatedId + '">Open Chat</button>';
+        }
+        notifDetailContent.innerHTML =
+          '<div class="notif-detail__icon" style="background:' + color + '20;color:' + color + ';">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg>' +
+          '</div>' +
+          '<div class="notif-detail__type">' + typeLabel + '</div>' +
+          '<div class="notif-detail__title">' + n.title + '</div>' +
+          '<div class="notif-detail__preview">' + n.preview + '</div>' +
+          '<div class="notif-detail__time">' + n.time + '</div>' +
+          '<div class="notif-detail__actions">' +
+          actionBtn +
+          '<button class="notif-detail__btn notif-detail__btn--secondary" data-action="dismiss">Dismiss</button>' +
+          '</div>';
+      }
+
+      function clearAllNotifs() {
+        notifications.forEach(function (n) { n.read = true; });
+        selectedNotifId = null;
+        updateNotifBadge();
+        renderNotifications();
+        notifEmptyEl.style.display = 'flex';
+        notifDetailContent.classList.remove('visible');
+      }
+
+      // ── Notification events ──
+      notifItemsEl.addEventListener('click', function (e) {
+        var item = e.target.closest('.notif-item');
+        if (!item) return;
+        var id = item.dataset.id;
+        if (e.target.closest('[data-action="dismiss"]')) {
+          var n = notifications.find(function (x) { return x.id === id; });
+          if (n) n.read = true;
+          if (selectedNotifId === id) { selectedNotifId = null; notifEmptyEl.style.display = 'flex'; notifDetailContent.classList.remove('visible'); }
+          updateNotifBadge();
+          renderNotifications();
+          return;
+        }
+        selectedNotifId = id;
+        renderNotifications();
+        renderNotifDetail(id);
+      });
+
+      document.querySelectorAll('.notif-list__filter-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          document.querySelectorAll('.notif-list__filter-btn').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          notifFilter = btn.dataset.filter;
+          selectedNotifId = null;
+          renderNotifications();
+          animateNotifItems();
+          notifEmptyEl.style.display = 'flex';
+          notifDetailContent.classList.remove('visible');
+        });
+      });
+
+      document.getElementById('notif-clear-all').addEventListener('click', clearAllNotifs);
+
+      notifDetailContent.addEventListener('click', function (e) {
+        var openChat = e.target.closest('[data-action="open-chat"]');
+        if (openChat) {
+          renderChat(openChat.dataset.id);
+          showView('messages');
+          return;
+        }
+        if (e.target.closest('[data-action="dismiss"]')) {
+          if (selectedNotifId) {
+            var n = notifications.find(function (x) { return x.id === selectedNotifId; });
+            if (n) n.read = true;
+            selectedNotifId = null;
+            updateNotifBadge();
+            renderNotifications();
+            notifEmptyEl.style.display = 'flex';
+            notifDetailContent.classList.remove('visible');
+          }
+        }
+      });
+
+      function simulateNewNotification() {
+        var picks = [
+          { type: 'message', title: 'Marcus Chen', preview: 'Can you send me the latest build?', person: 'Marcus Chen', relatedId: 'p2' },
+          { type: 'peer_on', title: 'Peer connected', preview: 'Elena Voss · elena-ws.local' },
+          { type: 'file_in', title: 'File received', preview: 'design-assets.zip from Priya Sharma', person: 'Priya Sharma', relatedId: 'p1' }
+        ];
+        var pick = picks[Math.floor(Math.random() * picks.length)];
+        var now = new Date();
+        var time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        var notif = { id: 'ns' + Date.now(), read: false, time: time, type: pick.type, title: pick.title, preview: pick.preview, person: pick.person || '', relatedId: pick.relatedId || '' };
+        notifications.unshift(notif);
+        updateNotifBadge();
+        if (notifViewEl.classList.contains('visible')) renderNotifications();
+        showToast('New ' + getNotifTypeLabel(notif.type).toLowerCase());
+        notifTimer = setTimeout(simulateNewNotification, 12000 + Math.floor(Math.random() * 8000));
+      }
+
+      var notifTimer = setTimeout(simulateNewNotification, 15000);
+
+      // ── Trash data ──
+      var trashItems = [
+        { id: 't1', type: 'conversation', name: 'Tom Bradley', preview: 'Let me know when you\'re back online', trashedAt: 'Yesterday, 4:20 PM', trashedBy: 'me', peerName: 'Tom Bradley', lastMsg: 'Let me know when you\'re back online' },
+        { id: 't2', type: 'file', name: 'old-screenshot.png', preview: '3.2 MB · from Sasha Volkov', trashedAt: 'Yesterday, 2:15 PM', trashedBy: 'me', peerName: 'Sasha Volkov', size: '3.2 MB' },
+        { id: 't3', type: 'file', name: 'draft-proposal.pdf', preview: '1.8 MB · from Dr. Elena Voss', trashedAt: '2 days ago, 11:30 AM', trashedBy: 'me', peerName: 'Dr. Elena Voss', size: '1.8 MB' },
+        { id: 't4', type: 'conversation', name: 'Group: Design Team', preview: 'Alex: Updated the color palette', trashedAt: '3 days ago, 9:00 AM', trashedBy: 'me', peerName: 'Design Team', lastMsg: 'Alex: Updated the color palette' }
+      ];
+
+      var trashViewEl = document.getElementById('trash-view');
+      var trashItemsEl = document.getElementById('trash-items');
+      var trashEmptyEl = document.getElementById('trash-empty');
+      var trashDetailContent = document.getElementById('trash-detail-content');
+      var selectedTrashId = null;
+      var trashFilter = 'all';
+
+      function getTrashIcon(type) {
+        return type === 'conversation'
+          ? 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'
+          : 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H9 M8 9h1';
+      }
+
+      function getTrashColor(type) {
+        return type === 'conversation' ? '#E86A33' : '#4F7DF3';
+      }
+
+      function renderTrash() {
+        var filtered = trashItems.filter(function (n) {
+          return trashFilter === 'all' || n.type === trashFilter;
+        });
+        var html = '';
+        if (filtered.length === 0) {
+          var msg = trashFilter !== 'all' ? 'No ' + trashFilter + 's in trash' : 'Trash is empty';
+          html = '<div class="trash-list__empty-state animate-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><h3>' + msg + '</h3><p>Deleted items appear here until permanently removed.</p></div>';
+          trashItemsEl.innerHTML = html;
+          trashEmptyEl.style.display = 'flex';
+          trashDetailContent.classList.remove('visible');
+          return;
+        }
+        filtered.forEach(function (item) {
+          var selected = selectedTrashId === item.id ? ' selected' : '';
+          var tag = item.type === 'conversation'
+            ? '<span class="trash-item__tag trash-item__tag--conv">Chat</span>'
+            : '<span class="trash-item__tag trash-item__tag--file">File</span>';
+          var color = getTrashColor(item.type);
+          var path = getTrashIcon(item.type);
+          html += '<div class="trash-item' + selected + '" data-id="' + item.id + '">' +
+            '<div class="trash-item__icon" style="background:' + color + '20;color:' + color + ';">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg>' +
+            '</div>' +
+            '<div class="trash-item__body">' +
+            '<div class="trash-item__title">' + item.name + '</div>' +
+            '<div class="trash-item__preview">' + item.preview + '</div>' +
+            '<div class="trash-item__meta">' + tag + '</div>' +
+            '</div>' +
+            '<span class="trash-item__time">' + item.trashedAt + '</span>' +
+            '</div>';
+        });
+        trashItemsEl.innerHTML = html;
+      }
+
+      function renderTrashDetail(id) {
+        var item = trashItems.find(function (x) { return x.id === id; });
+        if (!item) {
+          trashEmptyEl.style.display = 'flex';
+          trashDetailContent.classList.remove('visible');
+          return;
+        }
+        trashEmptyEl.style.display = 'none';
+        trashDetailContent.classList.add('visible');
+        requestAnimationFrame(function () {
+          trashDetailContent.style.animation = 'fade-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both';
+        });
+        var color = getTrashColor(item.type);
+        var path = getTrashIcon(item.type);
+        var typeLabel = item.type === 'conversation' ? 'Deleted conversation' : 'Deleted file';
+        var detailPreview = item.type === 'conversation'
+          ? 'Conversation with ' + item.peerName + '. Last message: "' + item.lastMsg + '"'
+          : 'File "' + item.name + '" (' + item.size + ') from ' + item.peerName + '.';
+        trashDetailContent.innerHTML =
+          '<div class="trash-detail__icon" style="background:' + color + '20;color:' + color + ';">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="' + path + '"/></svg>' +
+          '</div>' +
+          '<div class="trash-detail__type">' + typeLabel + '</div>' +
+          '<div class="trash-detail__title">' + item.name + '</div>' +
+          '<div class="trash-detail__preview">' + detailPreview + '</div>' +
+          '<div class="trash-detail__info">' +
+          '<span>Trashed: ' + item.trashedAt + '</span>' +
+          '<span>Type: ' + (item.type === 'conversation' ? 'Chat conversation' : 'File') + '</span>' +
+          '</div>' +
+          '<div class="trash-detail__actions">' +
+          '<button class="trash-detail__btn trash-detail__btn--primary" data-action="restore" data-id="' + item.id + '">Restore</button>' +
+          '<button class="trash-detail__btn trash-detail__btn--danger" data-action="delete-perm" data-id="' + item.id + '">Delete Permanently</button>' +
+          '</div>';
+      }
+
+      function emptyTrash() {
+        trashItems.length = 0;
+        selectedTrashId = null;
+        renderTrash();
+        trashEmptyEl.style.display = 'flex';
+        trashDetailContent.classList.remove('visible');
+        showToast('Trash emptied');
+      }
+
+      // ── Trash events ──
+      trashItemsEl.addEventListener('click', function (e) {
+        var item = e.target.closest('.trash-item');
+        if (!item) return;
+        var id = item.dataset.id;
+        selectedTrashId = id;
+        renderTrash();
+        renderTrashDetail(id);
+      });
+
+      document.querySelectorAll('.trash-list__filter-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          document.querySelectorAll('.trash-list__filter-btn').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          trashFilter = btn.dataset.filter;
+          selectedTrashId = null;
+          renderTrash();
+          animateTrashItems();
+          trashEmptyEl.style.display = 'flex';
+          trashDetailContent.classList.remove('visible');
+        });
+      });
+
+      document.getElementById('trash-empty-all').addEventListener('click', emptyTrash);
+
+      trashDetailContent.addEventListener('click', function (e) {
+        var restore = e.target.closest('[data-action="restore"]');
+        if (restore) {
+          var id = restore.dataset.id;
+          var idx = trashItems.findIndex(function (x) { return x.id === id; });
+          if (idx !== -1) {
+            trashItems.splice(idx, 1);
+            selectedTrashId = null;
+            renderTrash();
+            trashEmptyEl.style.display = 'flex';
+            trashDetailContent.classList.remove('visible');
+            showToast('Item restored');
+          }
+          return;
+        }
+        var del = e.target.closest('[data-action="delete-perm"]');
+        if (del) {
+          var did = del.dataset.id;
+          var didx = trashItems.findIndex(function (x) { return x.id === did; });
+          if (didx !== -1) {
+            trashItems.splice(didx, 1);
+            selectedTrashId = null;
+            renderTrash();
+            trashEmptyEl.style.display = 'flex';
+            trashDetailContent.classList.remove('visible');
+            showToast('Item permanently deleted');
+          }
+        }
+      });
+
+      function renderThreads() {
+        var pinned = threads.filter(function (t) { return t.pinned; });
+        var all = threads.filter(function (t) { return !t.pinned; });
+        var html = '';
+        if (pinned.length) {
+          html += '<div class="thread-section__label">PINNED</div>';
+          pinned.forEach(function (t) { html += renderThread(t); });
+        }
+        if (all.length) {
+          html += '<div class="thread-section__label">ALL</div>';
+          all.forEach(function (t) { html += renderThread(t); });
+        }
+        sectionsEl.innerHTML = html;
+      }
+
+      function renderThread(t) {
+        var active = state.activeId === t.id ? ' active' : '';
+        var unreadBadge = t.unread > 0 ? '<span class="thread-item__unread">' + t.unread + '</span>' : '';
+        var ring = t.online ? '<span class="status-ring"></span>' : '';
+        return '<div class="thread-item' + active + '" data-id="' + t.id + '">' +
+          '<div class="thread-item__avatar" style="background:' + t.color + '">' + t.initials + ring + '</div>' +
+          '<div class="thread-item__body">' +
+          '<div class="thread-item__top">' +
+          '<span class="thread-item__name">' + t.name + '</span>' +
+          '<span class="thread-item__time">' + t.time + '</span>' +
+          '</div>' +
+          '<div class="thread-item__preview">' + t.preview + '</div>' +
+          '</div>' +
+          unreadBadge +
+          '</div>';
+      }
+
+      function renderChat(id, animateLast) {
+        if (!id) {
+          chatEmpty.style.display = 'flex'; chatHeader.style.display = 'none'; inputBar.style.display = 'none';
+          return;
+        }
+        chatEmpty.style.display = 'none'; chatHeader.style.display = 'flex'; inputBar.style.display = 'flex';
+
+        var t = threads.find(function (x) { return x.id === id; });
+        if (!t) return;
+
+        document.getElementById('chat-name').textContent = t.name;
+        var av = document.getElementById('chat-avatar');
+        av.textContent = t.initials; av.style.background = t.color;
+
+        var msgs = messages[id] || [];
+        var html = '';
+        msgs.forEach(function (m) {
+          var rowClass = m.sender === 'me' ? 'message-row--sent' : 'message-row--received';
+          html += '<div class="message-row ' + rowClass + '">' + renderBubble(m) + '</div>';
+        });
+        if (msgs.length) {
+          html = '<div class="chat-view__date">Today</div>' + html;
+        }
+
+        var existing = chatMessages.querySelectorAll('.message-row, .chat-view__date');
+        existing.forEach(function (el) { el.remove(); });
+        chatMessages.insertAdjacentHTML('afterbegin', html);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        if (animateLast) {
+          var rows = chatMessages.querySelectorAll('.message-row');
+          var last = rows[rows.length - 1];
+          if (last) {
+            last.style.animation = 'fade-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both';
+          }
+        }
+
+        updateActiveThread(id);
+        if (t.online) simulateTyping(t);
+      }
+
+      function renderBubble(m) {
+        if (m.type === 'text') {
+          var cls = m.sender === 'me' ? 'message-bubble--sent' : 'message-bubble--received';
+          return '<div class="message-bubble ' + cls + '">' + m.content + '<div class="message-bubble__time">' + m.time + '</div></div>';
+        } else if (m.type === 'file') {
+          var cls = m.sender === 'me' ? 'message-bubble--sent' : 'message-bubble--received';
+          return '<div class="message-bubble message-bubble--file ' + cls + '">' +
+            '<div class="file-card">' +
+            '<div class="file-card__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>' +
+            '<div class="file-card__info"><div class="file-card__name">' + m.name + '</div><div class="file-card__size">' + m.size + '</div></div>' +
+            '<span class="file-card__action">' + (m.sender === 'me' ? 'Sent' : 'Download') + '</span>' +
+            '</div>' +
+            '<div class="message-bubble__time">' + m.time + '</div></div>';
+        }
+        return '';
+      }
+
+      function updateActiveThread(id) {
+        document.querySelectorAll('.thread-item.active').forEach(function (el) { el.classList.remove('active'); });
+        var item = document.querySelector('.thread-item[data-id="' + id + '"]');
+        if (item) item.classList.add('active');
+        state.activeId = id;
+      }
+
+      // ── Typing simulation ──
+      var typingTimer;
+      function simulateTyping(t) {
+        clearTimeout(typingTimer);
+        var indicator = document.getElementById('typing-indicator');
+        if (!indicator) {
+          var el = document.createElement('div');
+          el.id = 'typing-indicator';
+          el.style.cssText = 'padding:4px 24px 10px;font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:6px;';
+          el.innerHTML = '<span style="display:inline-flex;gap:3px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--text-muted);animation:tb 1.4s infinite"> </span><span style="width:5px;height:5px;border-radius:50%;background:var(--text-muted);animation:tb 1.4s 0.2s infinite"> </span><span style="width:5px;height:5px;border-radius:50%;background:var(--text-muted);animation:tb 1.4s 0.4s infinite"> </span></span><span>' + t.name + ' is typing...</span>';
+          document.getElementById('input-bar').before(el);
+        } else { indicator.style.display = 'flex'; }
+        typingTimer = setTimeout(function () {
+          var ind = document.getElementById('typing-indicator');
+          if (ind) ind.style.display = 'none';
+        }, 2500);
+      }
+
+      // ── Events ──
+      sectionsEl.addEventListener('click', function (e) {
+        var item = e.target.closest('.thread-item');
+        if (item) { closeProfile(); if (callState.active) closeCall(); renderChat(item.dataset.id); }
+      });
+
+      btnSend.addEventListener('click', sendMsg);
+      chatInput.addEventListener('input', function () { btnSend.disabled = !chatInput.value.trim(); });
+      chatInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+      });
+
+      function sendMsg() {
+        var text = chatInput.value.trim();
+        if (!text || !state.activeId) return;
+        var t = threads.find(function (x) { return x.id === state.activeId; });
+        if (!t) return;
+        var now = new Date();
+        var time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        var msgs = messages[state.activeId] || [];
+        msgs.push({ type: 'text', content: text, sender: 'me', time: time });
+        messages[state.activeId] = msgs;
+        chatInput.value = ''; btnSend.disabled = true;
+        btnSend.style.animation = 'scale-pulse 0.25s ease-out';
+        setTimeout(function () { btnSend.style.animation = ''; }, 260);
+        renderChat(state.activeId, true);
+        setTimeout(function () { simulateFileTransfer(); }, 300);
+      }
+
+      function simulateFileTransfer() {
+        if (state.transferActive) return;
+        state.transferActive = true;
+        document.getElementById('transfer-progress').style.display = 'block';
+        var fill = document.getElementById('transfer-fill');
+        var speed = document.getElementById('transfer-speed');
+        var progress = 0;
+        var speeds = [8.2, 11.5, 14.1, 12.8, 15.3, 13.6, 14.9];
+        var interval = setInterval(function () {
+          progress += 9 + Math.floor(Math.random() * 5);
+          if (progress > 100) progress = 100;
+          fill.style.width = progress + '%';
+          speed.textContent = speeds[Math.floor(Math.random() * speeds.length)] + ' MB/s';
+          if (progress >= 100) {
+            clearInterval(interval);
+            setTimeout(function () {
+              document.getElementById('transfer-progress').style.display = 'none';
+              state.transferActive = false;
+              showToast('File received');
+            }, 500);
+          }
+        }, 350);
+      }
+
+      function showToast(text) {
+        var toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = text;
+        toastContainer.appendChild(toast);
+        setTimeout(function () { toast.remove(); }, 3000);
+      }
+
+      // ── Dashboard data ──
+      var recentFiles = [
+        { name: 'dashboard-v3.fig', from: 'Priya Sharma', size: '4.2 MB', time: '12:34 PM', status: 'ok', peerColor: '#4F7DF3' },
+        { name: 'team-schedule-v2.pdf', from: 'Bella Huffman', size: '2.1 MB', time: '11:20 AM', status: 'ok', peerColor: '#E86A33' },
+        { name: 'project-brief.pdf', from: 'Sasha Volkov', size: '1.8 MB', time: '10:45 AM', status: 'ok', peerColor: '#AF52DE' },
+        { name: 'design-assets.zip', from: 'Priya Sharma', size: '24.6 MB', time: '09:30 AM', status: 'sending', peerColor: '#4F7DF3' },
+        { name: 'network-diagram.png', from: 'Marcus Chen', size: '3.5 MB', time: 'Yesterday', status: 'ok', peerColor: '#34C759' }
+      ];
+      var activePeersForDashboard = [
+        { name: 'Priya Sharma', initials: 'PS', color: '#4F7DF3', hostname: 'priya-mbp.local', status: 'Idle' },
+        { name: 'Marcus Chen', initials: 'MC', color: '#34C759', hostname: 'marcus-xps.local', status: 'Transferring' },
+        { name: 'Sasha Volkov', initials: 'SV', color: '#AF52DE', hostname: 'sasha-desktop.local', status: 'Online' },
+        { name: 'Dr. Elena Voss', initials: 'EV', color: '#5AC8FA', hostname: 'elena-ws.local', status: 'Away' }
+      ];
+      var timelineEvents = [
+        { text: '<strong>File received</strong> from Priya Sharma · <em>dashboard-v3.fig</em> (4.2 MB)', time: '12:34 PM', color: '#34C759' },
+        { text: '<strong>Voice message</strong> sent to Priya Sharma · 0:24', time: '12:02 PM', color: '#E86A33' },
+        { text: '<strong>Peer connected</strong> · Tom Bradley (<em>tom-linux.local</em>)', time: '11:15 AM', color: '#4F7DF3' },
+        { text: '<strong>File sent</strong> to Bella Huffman · <em>team-schedule-v2.pdf</em> (2.1 MB)', time: '10:45 AM', color: '#34C759' },
+        { text: '<strong>Peer disconnected</strong> · Tom Bradley', time: '09:22 AM', color: '#FF9500' },
+        { text: '<strong>Aria started</strong> · Session began', time: '08:00 AM', color: '#AF52DE' }
+      ];
+      function renderDashboard() {
+        // Files
+        var fh = ''; var icons = ['fig', 'pdf', 'doc', 'zip', 'img'];
+        recentFiles.forEach(function (f) {
+          var ext = f.name.split('.').pop();
+          var sClass = f.status === 'ok' ? 'd-file__status--ok' : 'd-file__status--sending';
+          var sText = f.status === 'ok' ? 'Completed' : 'Sending';
+          fh += '<div class="d-file">' +
+            '<div class="d-file__icon" style="background:' + f.peerColor + '20;color:' + f.peerColor + ';">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
+            '</div>' +
+            '<div class="d-file__info"><div class="d-file__name">' + f.name + '</div><div class="d-file__meta">' + f.from + ' · ' + f.time + '</div></div>' +
+            '<span class="d-file__status ' + sClass + '">' + sText + '</span>' +
+            '<span class="d-file__size">' + f.size + '</span>' +
+            '</div>';
+        });
+        document.getElementById('d-file-list').innerHTML = fh;
+
+        // Peers
+        var ph = '';
+        activePeersForDashboard.forEach(function (p) {
+          ph += '<div class="d-peer">' +
+            '<div class="d-peer__avatar" style="background:' + p.color + '">' + p.initials + '<span class="d-peer__dot"></span></div>' +
+            '<div class="d-peer__info"><div class="d-peer__name">' + p.name + '</div><div class="d-peer__meta">' + p.hostname + ' · ' + p.status + '</div></div>' +
+            '</div>';
+        });
+        document.getElementById('d-peer-grid').innerHTML = ph;
+
+        // Timeline
+        var th = '';
+        timelineEvents.forEach(function (e) {
+          th += '<div class="d-event">' +
+            '<div class="d-event__line"><span class="d-event__dot" style="background:' + e.color + '"></span></div>' +
+            '<div class="d-event__body"><div class="d-event__text">' + e.text + '</div><div class="d-event__time">' + e.time + '</div></div>' +
+            '</div>';
+        });
+        document.getElementById('d-timeline').innerHTML = th;
+      }
+
+      function animateDashboard() {
+        var sections = dashboardEl.querySelectorAll('.d-profile, .d-stats, .d-grid, .d-activity');
+        sections.forEach(function (el, i) {
+          el.style.animation = 'fade-slide-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both';
+          el.style.animationDelay = (i * 100) + 'ms';
+        });
+        var counters = dashboardEl.querySelectorAll('.d-stat__value');
+        counters.forEach(function (el) {
+          var text = el.textContent.trim();
+          var target = parseInt(text, 10);
+          if (isNaN(target)) return;
+          el.textContent = '0';
+          var duration = 600;
+          var start;
+          setTimeout(function () {
+            function tick(now) {
+              if (!start) start = now;
+              var p = Math.min((now - start) / duration, 1);
+              var eased = 1 - Math.pow(1 - p, 3);
+              el.textContent = Math.round(eased * target);
+              if (p < 1) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+          }, 200);
+        });
+      }
+
+      function staggerThreadItems() {
+        var items = sectionsEl.querySelectorAll('.thread-item');
+        items.forEach(function (el, i) {
+          el.style.animation = 'fade-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both';
+          el.style.animationDelay = (i * 40) + 'ms';
+        });
+      }
+
+      function animateNotifItems() {
+        var items = notifItemsEl.querySelectorAll('.notif-item');
+        items.forEach(function (el, i) {
+          el.style.animation = 'fade-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both';
+          el.style.animationDelay = (i * 40) + 'ms';
+        });
+      }
+
+      function animateTrashItems() {
+        var items = trashItemsEl.querySelectorAll('.trash-item');
+        items.forEach(function (el, i) {
+          el.style.animation = 'fade-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both';
+          el.style.animationDelay = (i * 40) + 'ms';
+        });
+      }
+
+      // ── View switching ──
+      var dashboardEl = document.getElementById('dashboard');
+      var threadListEl = document.querySelector('.thread-list');
+
+      function showView(view) {
+        document.querySelectorAll('.sidebar__nav-item').forEach(function (b) { b.classList.remove('active'); });
+
+        if (view === 'dashboard') {
+          dashboardEl.classList.add('visible');
+          dashboardEl.style.display = 'block';
+          threadListEl.style.display = 'none';
+          document.querySelector('.chat-view').style.display = 'none';
+          document.querySelector('[data-od-id="nav-dashboard"]').classList.add('active');
+          animateDashboard();
+        } else if (view === 'messages') {
+          dashboardEl.classList.remove('visible');
+          dashboardEl.style.display = 'none';
+          threadListEl.style.display = 'flex';
+          document.querySelector('.chat-view').style.display = 'flex';
+          notifViewEl.classList.remove('visible');
+          notifViewEl.style.display = 'none';
+          document.querySelector('[data-od-id="nav-messages"]').classList.add('active');
+          staggerThreadItems();
+        } else if (view === 'notifications') {
+          dashboardEl.classList.remove('visible');
+          dashboardEl.style.display = 'none';
+          threadListEl.style.display = 'none';
+          document.querySelector('.chat-view').style.display = 'none';
+          trashViewEl.classList.remove('visible');
+          trashViewEl.style.display = 'none';
+          notifViewEl.classList.add('visible');
+          notifViewEl.style.display = 'flex';
+          document.querySelector('[data-od-id="nav-notification"]').classList.add('active');
+          renderNotifications();
+          if (selectedNotifId) renderNotifDetail(selectedNotifId);
+          animateNotifItems();
+        } else if (view === 'trash') {
+          dashboardEl.classList.remove('visible');
+          dashboardEl.style.display = 'none';
+          threadListEl.style.display = 'none';
+          document.querySelector('.chat-view').style.display = 'none';
+          notifViewEl.classList.remove('visible');
+          notifViewEl.style.display = 'none';
+          trashViewEl.classList.add('visible');
+          trashViewEl.style.display = 'flex';
+          document.querySelector('[data-od-id="nav-trash"]').classList.add('active');
+          renderTrash();
+          if (selectedTrashId) renderTrashDetail(selectedTrashId);
+          animateTrashItems();
+        } else {
+          dashboardEl.classList.remove('visible');
+          dashboardEl.style.display = 'none';
+          threadListEl.style.display = 'none';
+          document.querySelector('.chat-view').style.display = 'none';
+          notifViewEl.classList.remove('visible');
+          notifViewEl.style.display = 'none';
+          trashViewEl.classList.remove('visible');
+          trashViewEl.style.display = 'none';
+        }
+      }
+
+      document.querySelectorAll('.sidebar__nav-item').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var odId = this.getAttribute('data-od-id');
+          if (odId === 'nav-dashboard') showView('dashboard');
+          else if (odId === 'nav-messages') showView('messages');
+          else if (odId === 'nav-notification') showView('notifications');
+          else if (odId === 'nav-trash') showView('trash');
+          else showView(null);
+        });
+      });
+
+      // ── Attach ──
+      document.getElementById('btn-attach').addEventListener('click', function () {
+        if (!state.activeId) return;
+        var t = threads.find(function (x) { return x.id === state.activeId; });
+        if (!t) return;
+        var time = '12:' + String(Math.floor(Math.random() * 59)).padStart(2, '0');
+        var msgs = messages[state.activeId] || [];
+        var file = ['screenshot.png', 'project-brief.pdf', 'design-assets.zip'][Math.floor(Math.random() * 3)];
+        var size = (Math.random() * 12 + 0.5).toFixed(1) + ' MB';
+        msgs.push({ type: 'file', name: file, size: size, sender: 'me', time: time });
+        messages[state.activeId] = msgs;
+        renderChat(state.activeId);
+        simulateFileTransfer();
+      });
+
+      // ── Init ──
+      var style = document.createElement('style');
+      style.textContent = '@keyframes tb { 0%,80%,100% { transform:scale(0.6);opacity:0.4 } 40% { transform:scale(1);opacity:1 } }';
+      document.head.appendChild(style);
+
+      renderDashboard();
+      renderThreads();
+      renderChat(state.activeId);
+      updateNotifBadge();
+      showView('dashboard');
+
+      // ── Dark mode toggle ──
+      var themeToggle = document.getElementById('theme-toggle');
+      function setTheme(dark) {
+        document.documentElement.toggleAttribute('data-theme', dark);
+        try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (_) { }
+      }
+      try {
+        var saved = localStorage.getItem('theme');
+        if (saved === 'dark') setTheme(true);
+      } catch (_) { }
+      themeToggle.addEventListener('click', function () {
+        var isDark = document.documentElement.hasAttribute('data-theme');
+        setTheme(!isDark);
+      });
+
+      // ── Profile panel ──
+      var profilePanel = document.getElementById('profile-panel');
+      var profileBody = document.getElementById('profile-body');
+      var profileClose = document.getElementById('profile-close');
+      var profileHostnames = { p1: 'priya-mbp.local', p2: 'marcus-xps.local', p3: 'sasha-desktop.local', p4: 'elena-ws.local', p5: 'tom-linux.local', p6: 'bella-air.local' };
+      var profileFingerprints = { p1: 'a3:f9:b2:7d:4e:81:c0:5a', p2: 'c7:1e:4a:92:3f:60:d8:1b', p3: '9d:42:f1:6e:08:b3:7c:22', p4: 'e4:8b:15:3c:70:ad:96:4f', p5: '52:8f:3a:1e:49:6d:b0:cc', p6: '1a:6c:99:d2:35:74:fe:ab' };
+      var profileFiles = { p1: 12, p2: 8, p3: 5, p4: 3, p5: 0, p6: 2 };
+      var profileTransfers = { p1: 24, p2: 15, p3: 9, p4: 6, p5: 1, p6: 4 };
+      var profileFirstSeen = { p1: '2 weeks ago', p2: '1 week ago', p3: '3 days ago', p4: '5 days ago', p5: 'Yesterday', p6: '4 days ago' };
+
+      function renderProfile(id) {
+        if (!id) { closeProfile(); return; }
+        var t = threads.find(function (x) { return x.id === id; });
+        if (!t) { closeProfile(); return; }
+        var hostname = profileHostnames[id] || 'unknown.local';
+        var fp = profileFingerprints[id] || '00:00:00:00:00:00:00:00';
+        var trustStatus = id === 'p1' ? 'verified' : 'unverified';
+        var trustLabel = id === 'p1' ? 'Verified' : 'Not verified';
+        var statusDot = t.online ? '● Online' : '○ Offline';
+        var statusColor = t.online ? 'var(--success)' : 'var(--text-muted)';
+        var files = profileFiles[id] || 0;
+        var transfers = profileTransfers[id] || 0;
+        var firstSeen = profileFirstSeen[id] || 'Today';
+        profileBody.innerHTML =
+          '<div class="profile-avatar" style="background:' + t.color + '">' + t.initials + '</div>' +
+          '<div class="profile-name">' + t.name + '</div>' +
+          '<div class="profile-status" style="color:' + statusColor + '">' + statusDot + '</div>' +
+          '<div class="profile-section">' +
+          '<div class="profile-section__label">Identity</div>' +
+          '<div class="profile-row"><span class="profile-row__label">Trust</span>' +
+          '<span class="profile-trust profile-trust--' + trustStatus + '">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' +
+          trustLabel +
+          '</span></div>' +
+          '<div class="profile-row"><span class="profile-row__label">Fingerprint</span></div>' +
+          '<div class="profile-fingerprint">' + fp + '</div>' +
+          '</div>' +
+          '<div class="profile-section">' +
+          '<div class="profile-section__label">Connection</div>' +
+          '<div class="profile-row"><span class="profile-row__label">Host</span><span class="profile-row__value">' + hostname + '</span></div>' +
+          '<div class="profile-row"><span class="profile-row__label">Transport</span><span class="profile-row__value">LAN · TCP direct</span></div>' +
+          '<div class="profile-row"><span class="profile-row__label">Protocol</span><span class="profile-row__value">v1.0</span></div>' +
+          '</div>' +
+          '<div class="profile-section">' +
+          '<div class="profile-section__label">Activity</div>' +
+          '<div class="profile-row"><span class="profile-row__label">Files shared</span><span class="profile-row__value">' + files + '</span></div>' +
+          '<div class="profile-row"><span class="profile-row__label">Transfers</span><span class="profile-row__value">' + transfers + '</span></div>' +
+          '<div class="profile-row"><span class="profile-row__label">First seen</span><span class="profile-row__value">' + firstSeen + '</span></div>' +
+          '</div>' +
+          '<div class="profile-section">' +
+          '<div class="profile-section__label">Actions</div>' +
+          '<div class="profile-actions">' +
+          '<button class="profile-actions__btn" data-action="close-chat">Close Conversation</button>' +
+          '<button class="profile-actions__btn profile-actions__btn--danger" data-action="block">Block Peer</button>' +
+          '</div>' +
+          '</div>';
+      }
+
+      function openProfile() {
+        if (!state.activeId) return;
+        profilePanel.classList.add('open');
+        renderProfile(state.activeId);
+      }
+
+      function closeProfile() { profilePanel.classList.remove('open'); }
+
+      document.getElementById('btn-profile').addEventListener('click', function () {
+        if (profilePanel.classList.contains('open')) { closeProfile(); }
+        else { openProfile(); }
+      });
+      profileClose.addEventListener('click', closeProfile);
+
+      profileBody.addEventListener('click', function (e) {
+        var action = e.target.closest('[data-action]');
+        if (!action) return;
+        if (action.dataset.action === 'close-chat') {
+          closeProfile();
+          renderChat(null);
+        } else if (action.dataset.action === 'block') {
+          closeProfile();
+          var t = threads.find(function (x) { return x.id === state.activeId; });
+          showToast('Blocked ' + (t ? t.name : 'peer'));
+        }
+      });
+
+      // ── Self profile modal ──
+      var selfModal = document.getElementById('self-modal');
+      var selfBackdrop = document.getElementById('self-backdrop');
+      var selfModalBody = document.getElementById('self-modal-body');
+
+      function renderSelfProfile() {
+        selfModalBody.innerHTML =
+          '<div class="profile-avatar" style="background:#E86A33;width:72px;height:72px;font-size:26px;">AR</div>' +
+          '<div class="profile-name">Alex Rivera</div>' +
+          '<div style="text-align:center;margin-top:2px;"><span class="d-profile__badge">Online</span></div>' +
+          '<div class="profile-section">' +
+          '<div class="profile-section__label">Identity</div>' +
+          '<div class="profile-row"><span class="profile-row__label">Fingerprint</span></div>' +
+          '<div class="profile-fingerprint">a3:f9:b2:7d:4e:81:c0:5a</div>' +
+          '</div>' +
+          '<div class="profile-section">' +
+          '<div class="profile-section__label">Network</div>' +
+          '<div class="profile-row"><span class="profile-row__label">Peers connected</span><span class="profile-row__value">4</span></div>' +
+          '<div class="profile-row"><span class="profile-row__label">Device name</span><span class="profile-row__value">alex-mbp.local</span></div>' +
+          '<div class="profile-row"><span class="profile-row__label">Transport</span><span class="profile-row__value">LAN · TCP direct</span></div>' +
+          '</div>' +
+          '<div class="profile-section">' +
+          '<div class="profile-section__label">Stats</div>' +
+          '<div class="profile-row"><span class="profile-row__label">Total transfers</span><span class="profile-row__value">42</span></div>' +
+          '<div class="profile-row"><span class="profile-row__label">Files shared</span><span class="profile-row__value">156</span></div>' +
+          '<div class="profile-row"><span class="profile-row__label">Session uptime</span><span class="profile-row__value">12h 34m</span></div>' +
+          '</div>';
+      }
+
+      function openSelfProfile() {
+        renderSelfProfile();
+        selfModal.classList.add('open');
+        selfBackdrop.classList.add('open');
+      }
+
+      function closeSelfProfile() {
+        selfModal.classList.remove('open');
+        selfBackdrop.classList.remove('open');
+      }
+
+      document.querySelector('.sidebar__profile').addEventListener('click', openSelfProfile);
+      document.getElementById('self-modal-close').addEventListener('click', closeSelfProfile);
+      selfBackdrop.addEventListener('click', closeSelfProfile);
+
+      // ── View All (Dashboard) ──
+      var viewBackdrop = document.getElementById('view-backdrop');
+      var viewModal = document.getElementById('view-modal');
+      var viewModalTitle = document.getElementById('view-modal-title');
+      var viewModalBody = document.getElementById('view-modal-body');
+      var viewModalClose = document.getElementById('view-modal-close');
+
+      var allFiles = recentFiles.concat([
+        { name: 'logo-final.ai', from: 'Marcus Chen', size: '1.3 MB', time: 'Yesterday, 6:12 PM', status: 'ok', peerColor: '#34C759' },
+        { name: 'presentation.key', from: 'Dr. Elena Voss', size: '18.7 MB', time: 'Yesterday, 3:40 PM', status: 'ok', peerColor: '#5AC8FA' },
+        { name: 'photo-dump.zip', from: 'Priya Sharma', size: '142 MB', time: '2 days ago', status: 'ok', peerColor: '#4F7DF3' },
+        { name: 'wireframes-v4.sketch', from: 'Sasha Volkov', size: '6.8 MB', time: '2 days ago', status: 'sending', peerColor: '#AF52DE' }
+      ]);
+      var allPeers = activePeersForDashboard.concat([
+        { name: 'Tom Bradley', initials: 'TB', color: '#FF6482', hostname: 'tom-linux.local', status: 'Offline' },
+        { name: 'Bella Huffman', initials: 'BH', color: '#E86A33', hostname: 'bella-air.local', status: 'Idle' }
+      ]);
+      var allEvents = timelineEvents.concat([
+        { text: '<strong>File received</strong> from Marcus Chen · <em>logo-final.ai</em> (1.3 MB)', time: '6:12 PM', color: '#34C759' },
+        { text: '<strong>Peer connected</strong> · Sasha Volkov', time: '3:30 PM', color: '#4F7DF3' },
+        { text: '<strong>File sent</strong> to Dr. Elena Voss · <em>presentation.key</em> (18.7 MB)', time: '3:40 PM', color: '#34C759' }
+      ]);
+
+      function openViewAll(view) {
+        var title = '', html = '';
+        if (view === 'files') {
+          title = 'All Files';
+          html += '<div class="view-modal__count">' + allFiles.length + ' files</div>';
+          allFiles.forEach(function (f) {
+            var sClass = f.status === 'ok' ? 'view-modal__tag--ok' : 'view-modal__tag--sending';
+            var sText = f.status === 'ok' ? 'Completed' : 'Sending';
+            html += '<div class="view-modal__row">' +
+              '<div class="view-modal__icon" style="background:' + f.peerColor + '20;color:' + f.peerColor + ';">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>' +
+              '</div>' +
+              '<div class="view-modal__info"><div class="view-modal__name">' + f.name + '</div><div class="view-modal__meta">' + f.from + ' · ' + f.time + '</div></div>' +
+              '<span class="view-modal__tag ' + sClass + '">' + sText + '</span>' +
+              '<span class="view-modal__size">' + f.size + '</span>' +
+              '</div>';
+          });
+        } else if (view === 'peers') {
+          title = 'All Peers';
+          html += '<div class="view-modal__count">' + allPeers.length + ' peers</div>';
+          allPeers.forEach(function (p) {
+            var online = p.status !== 'Offline';
+            var dotClass = online ? '' : ' view-modal__peer-dot--offline';
+            html += '<div class="view-modal__row">' +
+              '<div class="view-modal__peer-avatar" style="background:' + p.color + '">' + p.initials + '<span class="view-modal__peer-dot' + dotClass + '"></span></div>' +
+              '<div class="view-modal__info"><div class="view-modal__name">' + p.name + '</div><div class="view-modal__meta">' + p.hostname + '</div></div>' +
+              '<span class="view-modal__tag ' + (p.status === 'Offline' ? 'view-modal__tag--away' : 'view-modal__tag--ok') + '">' + p.status + '</span>' +
+              '</div>';
+          });
+        } else if (view === 'activity') {
+          title = 'Recent Activity';
+          html += '<div class="view-modal__count">' + allEvents.length + ' events</div>';
+          allEvents.forEach(function (e) {
+            html += '<div class="view-modal__row">' +
+              '<div style="width:20px;flex-shrink:0;display:grid;place-items:center;"><span style="width:8px;height:8px;border-radius:50%;display:block;background:' + e.color + '"></span></div>' +
+              '<div class="view-modal__info"><div class="view-modal__name">' + e.text + '</div><div class="view-modal__meta">' + e.time + '</div></div>' +
+              '</div>';
+          });
+        }
+        viewModalTitle.textContent = title;
+        viewModalBody.innerHTML = html;
+        viewModal.classList.add('open');
+        viewBackdrop.classList.add('open');
+      }
+
+      function closeViewAll() {
+        viewModal.classList.remove('open');
+        viewBackdrop.classList.remove('open');
+      }
+
+      document.querySelectorAll('[data-view]').forEach(function (btn) {
+        btn.addEventListener('click', function () { openViewAll(this.dataset.view); });
+      });
+      viewModalClose.addEventListener('click', closeViewAll);
+      viewBackdrop.addEventListener('click', closeViewAll);
+
+      // ── Peer Discovery ──
+      var personModal = document.getElementById('person-modal');
+      var personBackdrop = document.getElementById('person-backdrop');
+      var personSearch = document.getElementById('person-search');
+      var personRefresh = document.getElementById('person-refresh');
+      var personList = document.getElementById('person-list');
+      var personModalClose = document.getElementById('person-modal-close');
+
+      var PEER_DB = [
+        { name: 'Jamie Lin', host: 'jamie-mbp.local', online: true, color: '#34C759' },
+        { name: 'Sophia Torres', host: 'sophia-pc.local', online: true, color: '#007AFF' },
+        { name: 'Marcus Chen', host: 'marcus-thinkpad.local', online: true, color: '#AF52DE' },
+        { name: 'Elena Kowalski', host: 'elena-xps.local', online: false, color: '#FF9500' },
+        { name: 'David Park', host: 'david-surface.local', online: true, color: '#FF2D55' },
+        { name: 'Aisha Mohammed', host: 'aisha-arch.local', online: true, color: '#5856D6' },
+        { name: 'Tommy Beck', host: 'tommy-legion.local', online: false, color: '#00C7BE' },
+        { name: 'Priya Sharma', host: 'priya-mba.local', online: true, color: '#FF6482' },
+        { name: 'Oliver Grant', host: 'oliver-rog.local', online: true, color: '#32D74B' },
+        { name: 'Zara Huang', host: 'zara-spectre.local', online: false, color: '#BF5AF2' },
+      ];
+
+      var connectedPeers = {};
+
+      function getInitials(name) {
+        return name.split(' ').map(function (w) { return w[0]; }).join('').toUpperCase().slice(0, 2);
+      }
+
+      function renderPeerList(query) {
+        var q = (query || '').toLowerCase().trim();
+        var items = [];
+        PEER_DB.forEach(function (p) {
+          if (q && p.name.toLowerCase().indexOf(q) < 0 && p.host.toLowerCase().indexOf(q) < 0) return;
+          var initials = getInitials(p.name);
+          var alreadyConnected = connectedPeers[p.host];
+          items.push(
+            '<div class="person-modal__peer" data-host="' + p.host + '" data-name="' + p.name + '" data-color="' + p.color + '" data-initials="' + initials + '" data-online="' + p.online + '">' +
+            '<div class="person-modal__peer-avatar" style="background:' + p.color + '">' + initials +
+            '<span class="status-dot ' + (p.online ? 'online' : 'offline') + '"></span>' +
+            '</div>' +
+            '<div class="person-modal__peer-body">' +
+            '<div class="person-modal__peer-name">' + p.name + '</div>' +
+            '<div class="person-modal__peer-host">' + p.host + '</div>' +
+            '</div>' +
+            '<button class="person-modal__peer-action ' + (alreadyConnected ? 'connected' : 'connect') + '">' + (alreadyConnected ? 'Connected' : 'Connect') + '</button>' +
+            '</div>'
+          );
+        });
+        if (items.length === 0) {
+          personList.innerHTML = '<div class="person-modal__empty">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>' +
+            '<div>No peers found' + (q ? ' matching "' + q + '"' : '') + '</div>' +
+            '</div>';
+          return;
+        }
+        personList.innerHTML = items.join('');
+      }
+
+      function connectPeer(el) {
+        var host = el.dataset.host;
+        if (connectedPeers[host]) return;
+        var name = el.dataset.name;
+        var color = el.dataset.color;
+        var initials = el.dataset.initials;
+        var id = 'p' + Date.now();
+        var now = new Date();
+        var time = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        threads.unshift({ id: id, name: name, initials: initials, pinned: false, online: true, color: color, time: time, preview: 'Connected via ' + host, unread: 0 });
+        messages[id] = [];
+        connectedPeers[host] = true;
+        renderThreads();
+        state.activeId = id;
+        renderChat(id);
+        showView('messages');
+        closeAddPerson();
+        showToast('Connected to ' + name);
+      }
+
+      function openAddPerson() {
+        personModal.classList.add('open');
+        personBackdrop.classList.add('open');
+        renderPeerList('');
+        personSearch.value = '';
+        personSearch.focus();
+      }
+
+      function closeAddPerson() {
+        personModal.classList.remove('open');
+        personBackdrop.classList.remove('open');
+      }
+
+      function refreshPeers() {
+        personRefresh.classList.add('is-loading');
+        var oldPeers = PEER_DB.slice();
+        setTimeout(function () {
+          // Simulate discovery: shuffle online statuses and replace a peer
+          PEER_DB.forEach(function (p, i) {
+            if (i === 2 || i === 6) return;
+            p.online = Math.random() > 0.35;
+          });
+          renderPeerList(personSearch.value);
+          personRefresh.classList.remove('is-loading');
+        }, 900 + Math.random() * 600);
+      }
+
+      document.querySelector('.thread-list__add').addEventListener('click', openAddPerson);
+      personModalClose.addEventListener('click', closeAddPerson);
+      personBackdrop.addEventListener('click', closeAddPerson);
+
+      personSearch.addEventListener('input', function () {
+        renderPeerList(this.value);
+      });
+
+      personRefresh.addEventListener('click', refreshPeers);
+
+      personList.addEventListener('click', function (e) {
+        var btn = e.target.closest('.person-modal__peer-action');
+        if (btn && btn.classList.contains('connect')) {
+          var peer = btn.closest('.person-modal__peer');
+          if (peer) connectPeer(peer);
+          return;
+        }
+        var peer = e.target.closest('.person-modal__peer');
+        if (peer) {
+          var connectBtn = peer.querySelector('.person-modal__peer-action');
+          if (connectBtn && connectBtn.classList.contains('connect')) connectPeer(peer);
+        }
+      });
+
+      // ── Call overlay ──
+      var callOverlay = document.getElementById('call-overlay');
+      var callAvatar = document.getElementById('call-avatar');
+      var callName = document.getElementById('call-name');
+      var callStatus = document.getElementById('call-status');
+      var callStatusText = document.getElementById('call-status-text');
+      var callTimer = document.getElementById('call-timer');
+      var callMute = document.getElementById('call-mute');
+      var callEnd = document.getElementById('call-end');
+
+      var callState = { active: false, muted: false, phase: 'idle', seconds: 0, interval: null, endedTimer: null };
+
+      function formatTime(s) {
+        var m = Math.floor(s / 60);
+        var sec = s % 60;
+        return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+      }
+
+      function openCall() {
+        var thread = threads.find(function (t) { return t.id === state.activeId; });
+        if (!thread) return;
+        callState.active = true; callState.phase = 'dialing'; callState.seconds = 0;
+        callOverlay.classList.add('open');
+        callOverlay.classList.remove('is-connected', 'is-ended');
+        callOverlay.classList.add('is-dialing');
+        callAvatar.textContent = thread.initials;
+        callAvatar.style.background = thread.color;
+        callName.textContent = thread.name;
+        callStatusText.textContent = 'Calling...';
+        callStatus.querySelector('.dot').className = 'dot is-dialing';
+        callTimer.style.display = 'none';
+        callMute.classList.remove('is-muted');
+        callState.muted = false;
+        document.getElementById('chat-messages').style.display = 'none';
+        document.getElementById('input-bar').style.display = 'none';
+        document.querySelector('.transfer-progress').style.display = 'none';
+
+        // After 2s, auto-connect
+        setTimeout(function () {
+          if (!callState.active) return;
+          callState.phase = 'connected';
+          callOverlay.classList.remove('is-dialing');
+          callOverlay.classList.add('is-connected');
+          callStatusText.textContent = 'Connected';
+          callStatus.querySelector('.dot').className = 'dot is-connected';
+          callTimer.style.display = '';
+          callTimer.textContent = '00:00';
+          callState.interval = setInterval(function () {
+            callState.seconds++;
+            callTimer.textContent = formatTime(callState.seconds);
+          }, 1000);
+        }, 2000);
+      }
+
+      function closeCall() {
+        if (callState.interval) { clearInterval(callState.interval); callState.interval = null; }
+        if (callState.endedTimer) { clearTimeout(callState.endedTimer); callState.endedTimer = null; }
+        callState.phase = 'ended';
+        callOverlay.classList.remove('is-dialing', 'is-connected');
+        callOverlay.classList.add('is-ended');
+        callStatusText.textContent = 'Call ended';
+        callStatus.querySelector('.dot').className = 'dot';
+        callStatus.querySelector('.dot').style.display = 'none';
+        callTimer.style.display = 'none';
+
+        callState.endedTimer = setTimeout(function () {
+          callState.active = false; callState.phase = 'idle';
+          callOverlay.classList.remove('open', 'is-ended');
+          callStatus.querySelector('.dot').style.display = '';
+          document.getElementById('chat-messages').style.display = '';
+          document.getElementById('input-bar').style.display = '';
+          document.querySelector('.transfer-progress').style.display = '';
+        }, 1800);
+      }
+
+      function toggleMute() {
+        callState.muted = !callState.muted;
+        callMute.classList.toggle('is-muted', callState.muted);
+        showToast(callState.muted ? 'Muted' : 'Unmuted');
+      }
+
+      document.querySelector('[data-od-id="btn-call"]').addEventListener('click', function () {
+        if (!state.activeId) return;
+        if (callState.active) { closeCall(); return; }
+        openCall();
+      });
+      callEnd.addEventListener('click', closeCall);
+      callMute.addEventListener('click', toggleMute);
+
+      // ── Keyboard shortcut
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && selfModal.classList.contains('open')) {
+          closeSelfProfile();
+          return;
+        }
+        if (e.key === 'Escape' && viewModal.classList.contains('open')) {
+          closeViewAll();
+          return;
+        }
+        if (e.key === 'Escape' && personModal.classList.contains('open')) {
+          closeAddPerson();
+          return;
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+          e.preventDefault();
+          document.getElementById('search-input').focus();
+        }
+      });
+    })();
+  </script>
+
+
+</body>
+
+</html>

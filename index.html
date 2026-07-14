@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Aria</title>
+  </head>
+
+  <body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+      <img src="/logo.png" alt="Aria Logo" class="loading-logo" />
+      <div class="loader-container">
+        <div class="loader-dot"></div>
+        <div class="loader-dot"></div>
+        <div class="loader-dot"></div>
+        <div class="loader-dot"></div>
+      </div>
+    </div>
+
+    <div class="app" style="opacity: 0; transition: opacity 0.3s ease;">
+      <!-- Sidebar -->
+      <nav class="sidebar" data-od-id="sidebar">
+        <div class="sidebar__logo">
+          <img src="/logo.png" alt="Aria Logo" style="width: 30px; height: 30px;" />
+        </div>
+        <div class="sidebar__nav">
+          <button class="sidebar__nav-item" data-od-id="nav-dashboard" title="Dashboard" aria-label="Dashboard">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          </button>
+          <button class="sidebar__nav-item active" data-od-id="nav-messages" title="Messages" aria-label="Messages">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+          </button>
+        </div>
+        <button class="sidebar__theme" id="theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+          <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+        <button class="sidebar__profile" style="background:#E86A33;">ME</button>
+      </nav>
+
+      <!-- Main area -->
+      <div class="main-area">
+        <!-- Thread List -->
+        <section class="thread-list" data-od-id="thread-list">
+          <div class="thread-list__top">
+            <h1>Chat</h1>
+            <button class="thread-list__add" aria-label="New chat">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+          </div>
+          <div class="thread-list__search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+            <input type="text" id="search-input" placeholder="Search or start new chat" aria-label="Search chats">
+          </div>
+          <div class="thread-list__sections" id="thread-sections">
+            <!-- Populated via JS -->
+          </div>
+        </section>
+
+        <!-- Chat View -->
+        <main class="chat-view" id="chat-view" data-od-id="chat-view">
+          <!-- Header -->
+          <div class="chat-view__header" id="chat-header" style="display:none;" data-od-id="chat-header">
+            <div class="chat-view__header-avatar" id="chat-avatar" style="background:#34C759;">?</div>
+            <div class="chat-view__header-info">
+              <div class="chat-view__header-name" id="chat-name">Select a chat</div>
+              <div class="chat-view__header-status">● Online</div>
+            </div>
+            <div class="chat-view__header-actions">
+              <button class="chat-view__header-btn" id="btn-profile" data-od-id="btn-profile">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                Profile
+              </button>
+            </div>
+          </div>
+
+          <!-- Messages -->
+          <div class="chat-view__messages" id="chat-messages" data-od-id="chat-messages">
+            <div class="chat-view__empty animate-in" id="chat-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              <h3>No conversation selected</h3>
+              <p>Pick a chat or search for peers on your network.</p>
+            </div>
+          </div>
+
+          <!-- Input -->
+          <div class="input-bar" id="input-bar" style="display:none;" data-od-id="input-bar">
+            <div class="input-bar__field">
+              <input type="text" id="chat-input" placeholder="Write messages..." aria-label="Type a message">
+            </div>
+            <button class="input-bar__send" id="btn-send" disabled="" aria-label="Send message">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+          </div>
+        </main>
+
+        <!-- Profile Panel -->
+        <aside class="profile-panel" id="profile-panel" data-od-id="profile-panel">
+          <div class="profile-panel__header">
+            <h2>Profile</h2>
+            <button class="profile-panel__close" id="profile-close" aria-label="Close profile">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+          <div class="profile-panel__body" id="profile-body"></div>
+        </aside>
+      </div>
+    </div>
+    
+    <div class="modal-backdrop" id="person-backdrop"></div>
+    <div class="person-modal" id="person-modal" role="dialog" aria-modal="true" aria-label="Discover Peers">
+      <div class="person-modal__header">
+        <h2>Discover Peers</h2>
+        <button class="person-modal__close" id="person-modal-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="person-modal__search">
+        <div class="person-modal__search-wrap">
+          <svg class="person-modal__search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="person-search" placeholder="Search peers on network..." autocomplete="off"
+            aria-label="Search peers">
+        </div>
+        <button class="person-modal__refresh" id="person-refresh" aria-label="Refresh discovery">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="person-modal__list" id="person-list"></div>
+    </div>
+    
+    <div class="modal-backdrop" id="self-backdrop"></div>
+    <div class="self-modal" id="self-modal" data-od-id="self-modal">
+      <div class="self-modal__header">
+        <h2>Your Profile</h2>
+        <button class="self-modal__close" id="self-modal-close" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="self-modal__body" id="self-modal-body">
+        <div class="profile-section">
+          <div class="profile-section__label">Fingerprint</div>
+          <div class="profile-fingerprint"></div>
+          <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px; text-align: center;">Verify this fingerprint matches the peer's device.</p>
+        </div>
+      </div>
+    </div>
+    
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
