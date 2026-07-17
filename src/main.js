@@ -3,6 +3,7 @@ import './styles/chat.css';
 import { commands } from './bindings.js';
 import { peerStore } from './stores/peerStore.js';
 import { threadStore } from './stores/threadStore.js';
+import { connectionStore } from './stores/connectionStore.js';
 import { peerService } from './services/peerService.js';
 import { connectionService } from './services/connectionService.js';
 import { handshakeService } from './services/handshakeService.js';
@@ -279,6 +280,57 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
     });
+  }
+
+  // Wire up static send button and Enter key
+  const chatInput = document.getElementById('chat-input');
+  const btnSend = document.getElementById('btn-send');
+
+  if (chatInput) {
+    chatInput.addEventListener('input', () => {
+      if (btnSend) {
+        btnSend.disabled = !chatInput.value.trim() || !state.activeId;
+      }
+    });
+
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && chatInput.value.trim() && state.activeId) {
+        e.preventDefault();
+        handleSendMessage(chatInput.value.trim());
+        chatInput.value = '';
+        if (btnSend) btnSend.disabled = true;
+      }
+    });
+  }
+
+  if (btnSend) {
+    btnSend.addEventListener('click', () => {
+      if (chatInput && chatInput.value.trim() && state.activeId) {
+        handleSendMessage(chatInput.value.trim());
+        chatInput.value = '';
+        btnSend.disabled = true;
+      }
+    });
+  }
+
+  async function handleSendMessage(content) {
+    const fingerprint = state.activeId;
+    if (!fingerprint) return;
+
+    // Ensure connection is established before sending
+    if (!connectionStore.isConnected(fingerprint)) {
+      try {
+        await connectionService.connectToPeer(fingerprint);
+      } catch (err) {
+        console.warn('[Chat] Connection attempt failed, trying send anyway:', err);
+      }
+    }
+
+    try {
+      await messageService.sendMessage(fingerprint, content);
+    } catch (err) {
+      console.error('[Chat] Failed to send message:', err);
+    }
   }
 
   // Hide loading screen after all initialization is complete
