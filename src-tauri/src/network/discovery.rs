@@ -111,7 +111,11 @@ pub fn start_mdns_listener(
         };
 
         while let Ok(event) = receiver.recv_async().await {
+            println!("[DISCOVERY] Received event: {:?}", event);
             match event {
+                ServiceEvent::ServiceFound(name, type_) => {
+                    println!("[DISCOVERY] ServiceFound: name={} type={}", name, type_);
+                }
                 ServiceEvent::ServiceResolved(info) => {
                     let fullname = info.get_fullname();
                     println!("[DISCOVERY] ServiceResolved: {}", fullname);
