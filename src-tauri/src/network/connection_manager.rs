@@ -1,7 +1,7 @@
-use tokio::net::tcp::OwnedWriteHalf;
-use tokio::sync::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::net::tcp::OwnedWriteHalf;
+use tokio::sync::RwLock;
 
 /// Handle to an active peer connection, holding the write-half of the TCP stream.
 /// Clone-able because all interior state is wrapped in Arc.

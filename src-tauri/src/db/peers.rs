@@ -1,5 +1,5 @@
-use rusqlite::{params, Connection};
 use anyhow::{Context, Result};
+use rusqlite::{params, Connection};
 use serde::Serialize;
 use specta::Type;
 
@@ -17,6 +17,7 @@ pub struct PeerRow {
     pub network_interface: Option<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn upsert_peer(
     conn: &Connection,
     public_key: &str,
@@ -47,7 +48,8 @@ pub fn set_peer_offline(conn: &Connection, fingerprint: &str) -> Result<()> {
     conn.execute(
         "UPDATE peers SET is_online = 0 WHERE fingerprint = ?1",
         params![fingerprint],
-    ).context("Failed to set peer offline")?;
+    )
+    .context("Failed to set peer offline")?;
     Ok(())
 }
 
@@ -58,26 +60,28 @@ pub fn list_peers(conn: &Connection) -> Result<Vec<PeerRow>> {
          ORDER BY is_online DESC, last_seen DESC"
     ).context("Failed to prepare list_peers query")?;
 
-    let peer_iter = stmt.query_map([], |row| {
-        Ok(PeerRow {
-            id: row.get(0)?,
-            fingerprint: row.get(1)?,
-            display_name: row.get(2)?,
-            hostname: row.get(3)?,
-            ip_address: row.get(4)?,
-            port: row.get(5)?,
-            trust_level: row.get(6)?,
-            is_online: row.get(7)?,
-            last_seen: row.get(8)?,
-            network_interface: row.get(9)?,
+    let peer_iter = stmt
+        .query_map([], |row| {
+            Ok(PeerRow {
+                id: row.get(0)?,
+                fingerprint: row.get(1)?,
+                display_name: row.get(2)?,
+                hostname: row.get(3)?,
+                ip_address: row.get(4)?,
+                port: row.get(5)?,
+                trust_level: row.get(6)?,
+                is_online: row.get(7)?,
+                last_seen: row.get(8)?,
+                network_interface: row.get(9)?,
+            })
         })
-    }).context("Failed to execute list_peers query")?;
+        .context("Failed to execute list_peers query")?;
 
     let mut peers = Vec::new();
     for peer in peer_iter {
         peers.push(peer.context("Failed to read peer row")?);
     }
-    
+
     Ok(peers)
 }
 
@@ -85,7 +89,8 @@ pub fn set_trust_level(conn: &Connection, fingerprint: &str, level: &str) -> Res
     conn.execute(
         "UPDATE peers SET trust_level = ?1 WHERE fingerprint = ?2",
         params![level, fingerprint],
-    ).context("Failed to set trust level")?;
+    )
+    .context("Failed to set trust level")?;
     Ok(())
 }
 
@@ -94,30 +99,30 @@ pub fn set_trust_level(conn: &Connection, fingerprint: &str, level: &str) -> Res
 pub fn clear_stale_peers(conn: &Connection, current_network_ips: &[String]) -> Result<()> {
     // Get all online peers
     let online_peers = list_peers(conn)?;
-    
+
     for peer in online_peers {
         if !peer.is_online {
             continue;
         }
-        
+
         // Check if peer's IP is still on the current network
         // A peer is considered stale if:
         // 1. It has no IP address (edge case)
         // 2. Its IP doesn't match any of the current network IPs
         let is_stale = if let Some(ref peer_ip) = peer.ip_address {
             // Check if the peer IP is in the same subnet as any current IP
-            !current_network_ips.iter().any(|current_ip| {
-                is_same_subnet(peer_ip, current_ip)
-            })
+            !current_network_ips
+                .iter()
+                .any(|current_ip| is_same_subnet(peer_ip, current_ip))
         } else {
             true
         };
-        
+
         if is_stale {
             set_peer_offline(conn, &peer.fingerprint)?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -131,9 +136,7 @@ fn is_same_subnet(ip1: &str, ip2: &str) -> bool {
 
 /// Get a peer's public key by fingerprint
 pub fn get_peer_public_key(conn: &Connection, fingerprint: &str) -> Result<Option<String>> {
-    let mut stmt = conn.prepare(
-        "SELECT public_key FROM peers WHERE fingerprint = ?1"
-    )?;
+    let mut stmt = conn.prepare("SELECT public_key FROM peers WHERE fingerprint = ?1")?;
     let mut rows = stmt.query([fingerprint])?;
 
     if let Some(row) = rows.next()? {
@@ -144,10 +147,14 @@ pub fn get_peer_public_key(conn: &Connection, fingerprint: &str) -> Result<Optio
 }
 
 /// Update a peer's public key
-pub fn update_peer_public_key(conn: &Connection, fingerprint: &str, public_key: &str) -> Result<()> {
+pub fn update_peer_public_key(
+    conn: &Connection,
+    fingerprint: &str,
+    public_key: &str,
+) -> Result<()> {
     conn.execute(
         "UPDATE peers SET public_key = ?1 WHERE fingerprint = ?2",
-        [public_key, fingerprint]
+        [public_key, fingerprint],
     )?;
     Ok(())
 }

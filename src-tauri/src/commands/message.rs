@@ -1,6 +1,6 @@
-use tauri::{AppHandle, Emitter};
-use crate::protocol::{Envelope, MessageType};
 use crate::protocol::message::MessagePayload;
+use crate::protocol::{Envelope, MessageType};
+use tauri::{AppHandle, Emitter};
 
 /// Send a text message to a peer
 #[tauri::command]
@@ -36,7 +36,8 @@ pub async fn send_message(
             payload.timestamp,
             reply_to.as_deref(),
             "pending",
-        ).map_err(|e| e.to_string())?;
+        )
+        .map_err(|e| e.to_string())?;
     }
 
     // Wrap in envelope
@@ -49,18 +50,26 @@ pub async fn send_message(
     let envelope_bytes = envelope.to_bytes().map_err(|e| e.to_string())?;
 
     // Send via connection handle
-    let handle = conn_mgr.get(&fingerprint).await
+    let handle = conn_mgr
+        .get(&fingerprint)
+        .await
         .ok_or_else(|| "Connection handle not found".to_string())?;
 
-    handle.send_raw(&envelope_bytes).await.map_err(|e| e.to_string())?;
+    handle
+        .send_raw(&envelope_bytes)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Emit event
-    let _ = app.emit("message:sent", serde_json::json!({
-        "message_id": message_id,
-        "fingerprint": fingerprint,
-        "content": envelope.payload.get("content").and_then(|v| v.as_str()).unwrap_or(""),
-        "timestamp": envelope.timestamp,
-    }));
+    let _ = app.emit(
+        "message:sent",
+        serde_json::json!({
+            "message_id": message_id,
+            "fingerprint": fingerprint,
+            "content": envelope.payload.get("content").and_then(|v| v.as_str()).unwrap_or(""),
+            "timestamp": envelope.timestamp,
+        }),
+    );
 
     println!("[Message] Sent message {} to {}", message_id, fingerprint);
     Ok(message_id)
@@ -74,6 +83,5 @@ pub fn get_messages(
     fingerprint: String,
 ) -> Result<Vec<crate::db::messages::MessageRow>, String> {
     let db_guard = state.db.lock().map_err(|e| e.to_string())?;
-    crate::db::messages::get_messages(&db_guard, &fingerprint)
-        .map_err(|e| e.to_string())
+    crate::db::messages::get_messages(&db_guard, &fingerprint).map_err(|e| e.to_string())
 }

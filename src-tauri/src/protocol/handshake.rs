@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::protocol::{Envelope, MessageType};
+use serde::{Deserialize, Serialize};
 
 /// Handshake payload exchanged during peer connection
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,8 +40,7 @@ impl HandshakePayload {
 
     /// Extract handshake payload from an envelope
     pub fn from_envelope(envelope: &Envelope) -> anyhow::Result<Self> {
-        serde_json::from_value(envelope.payload.clone())
-            .map_err(Into::into)
+        serde_json::from_value(envelope.payload.clone()).map_err(Into::into)
     }
 
     /// Check if timestamp is within acceptable drift (30 seconds for handshake)
@@ -73,7 +72,8 @@ mod tests {
             payload: json,
             timestamp: 1234567890,
             signature: "sig".to_string(),
-        }).unwrap();
+        })
+        .unwrap();
         assert_eq!(decoded.fingerprint, "test_fp");
     }
 }

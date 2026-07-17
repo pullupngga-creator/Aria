@@ -1,17 +1,34 @@
-use crate::protocol::{Envelope, MessageType};
-use crate::protocol::handshake::HandshakePayload;
-use crate::protocol::message::{MessagePayload, TypingPayload};
-use crate::db::peers;
 use crate::db::messages;
-use tauri::{AppHandle, Manager, Emitter};
+use crate::db::peers;
+use crate::protocol::handshake::HandshakePayload;
+use crate::protocol::message::{MessagePayload, ReceiptPayload, TypingPayload};
+use crate::protocol::{Envelope, MessageType};
+use ed25519_dalek::VerifyingKey;
+use tauri::{AppHandle, Emitter, Manager};
 
 /// Dispatch an envelope to the appropriate handler based on message type.
 /// At this step, most handlers are stubs that just log. They will be implemented in later steps.
 pub async fn dispatch_envelope(
     envelope: Envelope,
     app: AppHandle,
-    _sender_public_key: ed25519_dalek::VerifyingKey,
+    sender_public_key: Option<VerifyingKey>,
 ) {
+    // Verify signature if we have the sender's public key
+    if let Some(pubkey) = sender_public_key {
+        if let Err(e) = envelope.verify(&pubkey) {
+            eprintln!(
+                "[Protocol] Signature verification failed for {}: {}",
+                envelope.sender, e
+            );
+            return;
+        }
+    } else {
+        eprintln!(
+            "[Protocol] No public key for {}, skipping signature verification",
+            envelope.sender
+        );
+    }
+
     match envelope.message_type {
         MessageType::Handshake => {
             println!("[Protocol] Received handshake from {}", envelope.sender);
@@ -27,7 +44,10 @@ pub async fn dispatch_envelope(
 
             // Validate handshake timestamp
             if !handshake.is_timestamp_valid() {
-                eprintln!("[Protocol] Handshake timestamp invalid from {}", handshake.fingerprint);
+                eprintln!(
+                    "[Protocol] Handshake timestamp invalid from {}",
+                    handshake.fingerprint
+                );
                 return;
             }
 
@@ -37,56 +57,56 @@ pub async fn dispatch_envelope(
                 return;
             }
 
-            // Get peer from DB
-            let peer_info = {
-                let app_state = app.state::<crate::AppState>();
-                let db_guard = app_state.db.lock().unwrap();
-                peers::get_peer_public_key(&db_guard, &handshake.fingerprint).ok().flatten()
-            };
-
-            // Verify signature using stored public key
-            if let Some(stored_pubkey_hex) = peer_info {
-                if let Ok(pubkey_bytes) = hex::decode(stored_pubkey_hex) {
-                    let pubkey_array: [u8; 32] = pubkey_bytes.try_into().unwrap_or([0u8; 32]);
-                    let pubkey = ed25519_dalek::VerifyingKey::from_bytes(&pubkey_array);
-
-                    if let Ok(pubkey) = pubkey {
-                        if let Err(e) = envelope.verify(&pubkey) {
-                            eprintln!("[Protocol] Handshake signature verification failed: {}", e);
-                            return;
-                        }
-                    }
-                }
-            }
-
             // Check trust status
             let is_blocked = {
                 let app_state = app.state::<crate::AppState>();
                 let db_guard = app_state.db.lock().unwrap();
-                peers::list_peers(&db_guard).ok()
-                    .and_then(|peers| peers.into_iter().find(|p| p.fingerprint == handshake.fingerprint))
+                peers::list_peers(&db_guard)
+                    .ok()
+                    .and_then(|peers| {
+                        peers
+                            .into_iter()
+                            .find(|p| p.fingerprint == handshake.fingerprint)
+                    })
                     .map(|p| p.trust_level == "blocked")
                     .unwrap_or(false)
             };
 
             if is_blocked {
-                eprintln!("[Protocol] Rejecting handshake from blocked peer {}", handshake.fingerprint);
-                let _ = app.emit("peer:handshake_rejected", serde_json::json!({
-                    "fingerprint": handshake.fingerprint,
-                    "reason": "blocked"
-                }));
+                eprintln!(
+                    "[Protocol] Rejecting handshake from blocked peer {}",
+                    handshake.fingerprint
+                );
+                let _ = app.emit(
+                    "peer:handshake_rejected",
+                    serde_json::json!({
+                        "fingerprint": handshake.fingerprint,
+                        "reason": "blocked"
+                    }),
+                );
                 return;
             }
 
-            // TODO: Rekey connection manager (need access to conn_mgr)
-            // This requires passing conn_mgr to dispatcher or using a different approach
-            println!("[Protocol] Handshake accepted for {}", handshake.fingerprint);
+            // Rekey connection manager: replace temp IP key with verified fingerprint
+            let app_state = app.state::<crate::AppState>();
+            app_state
+                .connection_manager
+                .rekey(&envelope.sender, handshake.fingerprint.clone())
+                .await;
 
-            let _ = app.emit("peer:handshake_complete", serde_json::json!({
-                "fingerprint": handshake.fingerprint,
-                "display_name": handshake.display_name,
-                "public_key": handshake.public_key
-            }));
+            println!(
+                "[Protocol] Handshake accepted for {}",
+                handshake.fingerprint
+            );
+
+            let _ = app.emit(
+                "peer:handshake_complete",
+                serde_json::json!({
+                    "fingerprint": handshake.fingerprint,
+                    "display_name": handshake.display_name,
+                    "public_key": handshake.public_key
+                }),
+            );
         }
         MessageType::Message => {
             println!("[Protocol] Received message from {}", envelope.sender);
@@ -123,15 +143,35 @@ pub async fn dispatch_envelope(
             }
 
             // Emit event to frontend
-            let _ = app.emit("message:received", serde_json::json!({
-                "message_id": message_id,
-                "fingerprint": fingerprint,
-                "content": content,
-                "timestamp": timestamp,
-                "reply_to": reply_to,
-            }));
+            let _ = app.emit(
+                "message:received",
+                serde_json::json!({
+                    "message_id": message_id,
+                    "fingerprint": fingerprint,
+                    "content": content,
+                    "timestamp": timestamp,
+                    "reply_to": reply_to,
+                }),
+            );
 
-            // TODO: Send delivery receipt (implement in next iteration)
+            // Send delivery receipt back to sender
+            let receipt = ReceiptPayload::new(message_id.clone(), "delivered".to_string());
+            let receipt_envelope = Envelope::new(
+                MessageType::Message,
+                app.state::<crate::AppState>().identity.fingerprint.clone(),
+                serde_json::to_value(receipt).unwrap(),
+                &app.state::<crate::AppState>().identity,
+            );
+            if let Ok(envelope_bytes) = receipt_envelope.to_bytes() {
+                if let Some(handle) = app
+                    .state::<crate::AppState>()
+                    .connection_manager
+                    .get(&fingerprint)
+                    .await
+                {
+                    let _ = handle.send_raw(&envelope_bytes).await;
+                }
+            }
         }
         MessageType::FileOffer => {
             // Step 5: Implement file transfer
@@ -156,7 +196,10 @@ pub async fn dispatch_envelope(
             // TODO: Update peer last_seen in DB
         }
         MessageType::Typing => {
-            println!("[Protocol] Received typing indicator from {}", envelope.sender);
+            println!(
+                "[Protocol] Received typing indicator from {}",
+                envelope.sender
+            );
 
             // Parse typing payload
             let typing = match TypingPayload::from_envelope(&envelope) {
@@ -168,11 +211,14 @@ pub async fn dispatch_envelope(
             };
 
             // Emit typing event to frontend
-            let _ = app.emit("typing:received", serde_json::json!({
-                "fingerprint": envelope.sender,
-                "is_typing": typing.is_typing,
-                "timestamp": typing.timestamp,
-            }));
+            let _ = app.emit(
+                "typing:received",
+                serde_json::json!({
+                    "fingerprint": envelope.sender,
+                    "is_typing": typing.is_typing,
+                    "timestamp": typing.timestamp,
+                }),
+            );
         }
     }
 }

@@ -1,5 +1,5 @@
-use tauri::{AppHandle, Emitter};
 use crate::network::connection_manager::ConnectionHandle;
+use tauri::{AppHandle, Emitter};
 
 /// Open an outbound TCP connection to a peer and register it in the ConnectionManager.
 ///
@@ -27,7 +27,9 @@ pub async fn connect_to_peer(
             .into_iter()
             .find(|p| p.fingerprint == fingerprint)
             .ok_or_else(|| format!("Peer '{}' not found in database", fingerprint))?;
-        let ip = peer.ip_address.ok_or_else(|| "Peer has no known IP address".to_string())?;
+        let ip = peer
+            .ip_address
+            .ok_or_else(|| "Peer has no known IP address".to_string())?;
         let port = peer.port as u16;
         (ip, port)
     };
@@ -45,13 +47,19 @@ pub async fn connect_to_peer(
 
     let (reader, writer) = stream.into_split();
     let handle = ConnectionHandle::new(fingerprint.clone(), writer);
-    state.connection_manager.insert(fingerprint.clone(), handle).await;
+    state
+        .connection_manager
+        .insert(fingerprint.clone(), handle)
+        .await;
 
     // Notify frontend immediately
-    let _ = app.emit("peer:connected", serde_json::json!({
-        "fingerprint": fingerprint,
-        "direction": "outbound"
-    }));
+    let _ = app.emit(
+        "peer:connected",
+        serde_json::json!({
+            "fingerprint": fingerprint,
+            "direction": "outbound"
+        }),
+    );
 
     // Spawn persistent read loop for this outbound stream
     let fp_clone = fingerprint.clone();

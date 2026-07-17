@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS settings (
     require_trust       BOOLEAN NOT NULL DEFAULT 1,        -- auto-accept only from trusted peers
     notifications       BOOLEAN NOT NULL DEFAULT 1,
     listen_port         INTEGER NOT NULL DEFAULT 9473,
+    trust_mode          TEXT DEFAULT 'manual',              -- 'manual' | 'auto'
     created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -26,34 +27,20 @@ CREATE TABLE IF NOT EXISTS peers (
     first_seen          DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_seen           DATETIME,
     is_online           BOOLEAN NOT NULL DEFAULT 0,
+    network_interface   TEXT,                               -- subnet for network change detection
     UNIQUE(public_key)
-);
-
-CREATE TABLE IF NOT EXISTS conversations (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    peer_id             INTEGER NOT NULL REFERENCES peers(id) ON DELETE CASCADE,
-    unread_count        INTEGER NOT NULL DEFAULT 0,
-    last_message_id     INTEGER,
-    last_activity       DATETIME,
-    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(peer_id)
 );
 
 CREATE TABLE IF NOT EXISTS messages (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    conversation_id     INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    sender_peer_id      INTEGER REFERENCES peers(id),       -- NULL = self
-    type                TEXT NOT NULL,                      -- 'text' | 'file' | 'voice'
-    content             TEXT,                               -- text body OR JSON metadata for file/voice
-    file_path           TEXT,                               -- local path to received file or voice recording
-    file_size           INTEGER,                            -- bytes
-    file_name           TEXT,
-    mime_type           TEXT,
-    status              TEXT NOT NULL DEFAULT 'pending',    -- 'pending' | 'sent' | 'delivered' | 'failed'
-    signature           TEXT,                               -- Ed25519 signature of content (hex)
-    timestamp           DATETIME DEFAULT CURRENT_TIMESTAMP,
-    edited_at           DATETIME,
-    is_deleted          BOOLEAN NOT NULL DEFAULT 0
+    message_id          TEXT UNIQUE NOT NULL,               -- UUID
+    peer_fingerprint    TEXT NOT NULL,                      -- peer fingerprint (FK to peers.fingerprint)
+    direction           TEXT NOT NULL,                      -- 'sent' | 'received'
+    content             TEXT NOT NULL,                      -- text body OR JSON metadata for file/voice
+    timestamp           INTEGER NOT NULL,                   -- unix timestamp (seconds)
+    reply_to            TEXT,                               -- message_id being replied to
+    status              TEXT DEFAULT 'pending',             -- 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
+    FOREIGN KEY (peer_fingerprint) REFERENCES peers(fingerprint)
 );
 
 CREATE TABLE IF NOT EXISTS file_transfers (
@@ -86,16 +73,16 @@ CREATE TABLE IF NOT EXISTS voice_messages (
 CREATE TABLE IF NOT EXISTS typing_indicators (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     peer_id             INTEGER NOT NULL REFERENCES peers(id) ON DELETE CASCADE,
-    conversation_id     INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    peer_fingerprint    TEXT NOT NULL REFERENCES peers(fingerprint) ON DELETE CASCADE,
     is_typing           BOOLEAN NOT NULL DEFAULT 1,
     updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(peer_id, conversation_id)
+    UNIQUE(peer_fingerprint)
 );
 
-CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_peer ON messages(peer_fingerprint);
 CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
 CREATE INDEX IF NOT EXISTS idx_peers_trust ON peers(trust_level);
 CREATE INDEX IF NOT EXISTS idx_peers_online ON peers(is_online);
+CREATE INDEX IF NOT EXISTS idx_peers_network ON peers(network_interface);
 CREATE INDEX IF NOT EXISTS idx_file_transfers_status ON file_transfers(status);
-CREATE INDEX IF NOT EXISTS idx_conversations_activity ON conversations(last_activity DESC);
 "#;

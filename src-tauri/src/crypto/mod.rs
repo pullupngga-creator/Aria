@@ -1,9 +1,9 @@
+use anyhow::Context;
 use ed25519_dalek::SigningKey;
 use keyring::Entry;
 use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
-use anyhow::Context;
 
 pub struct Identity {
     pub signing_key: SigningKey,
@@ -12,14 +12,15 @@ pub struct Identity {
 }
 
 pub fn init() -> Result<Arc<Identity>, anyhow::Error> {
-    let entry = Entry::new("aria_identity", "user")
-        .context("Failed to initialize keyring entry")?;
+    let entry =
+        Entry::new("aria_identity", "user").context("Failed to initialize keyring entry")?;
 
     let signing_key = match entry.get_password() {
         Ok(encoded_key) => {
-            let bytes = hex::decode(&encoded_key)
-                .context("Failed to decode private key from hex")?;
-            let array: [u8; 32] = bytes.try_into()
+            let bytes =
+                hex::decode(&encoded_key).context("Failed to decode private key from hex")?;
+            let array: [u8; 32] = bytes
+                .try_into()
                 .map_err(|_| anyhow::anyhow!("Invalid private key length stored in keyring"))?;
             SigningKey::from_bytes(&array)
         }
@@ -27,7 +28,8 @@ pub fn init() -> Result<Arc<Identity>, anyhow::Error> {
             let mut csprng = OsRng;
             let key = SigningKey::generate(&mut csprng);
             let encoded_key = hex::encode(key.to_bytes());
-            entry.set_password(&encoded_key)
+            entry
+                .set_password(&encoded_key)
                 .context("Failed to save generated private key to keychain")?;
             key
         }

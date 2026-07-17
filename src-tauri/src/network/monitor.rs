@@ -1,8 +1,8 @@
-use tokio::time::{interval, Duration};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager};
 use crate::db::peers;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::sync::Mutex;
+use tokio::time::{interval, Duration};
 
 /// Tracks the current network interface state
 #[derive(Debug, Clone)]
@@ -60,6 +60,12 @@ impl NetworkState {
     }
 }
 
+impl Default for NetworkState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Gets all local IP addresses (IPv4 only, non-loopback)
 fn get_local_ips() -> Vec<String> {
     local_ip_address::list_afinet_netifas()
@@ -81,10 +87,7 @@ fn get_local_ips() -> Vec<String> {
 /// Every 10 seconds, polls all local IP addresses. If any change is detected,
 /// emits a `network:changed` event to the frontend with the new IP list.
 /// Also clears stale peers and re-broadcasts mDNS on network changes.
-pub fn start_network_monitor(
-    app_handle: AppHandle,
-    network_state: NetworkState,
-) {
+pub fn start_network_monitor(app_handle: AppHandle, network_state: NetworkState) {
     tauri::async_runtime::spawn(async move {
         // Initial population
         let initial_ips = get_local_ips();
@@ -114,8 +117,13 @@ pub fn start_network_monitor(
                 }
 
                 // Re-broadcast mDNS on the new network
-                if let Some(daemon) = app_handle.state::<crate::AppState>()
-                    .mdns_daemon.lock().unwrap().as_ref() {
+                if let Some(daemon) = app_handle
+                    .state::<crate::AppState>()
+                    .mdns_daemon
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                {
                     // Get display name from settings
                     let display_name = if let Ok(conn) = crate::db::get_connection() {
                         crate::db::settings::get_peer_settings(&conn)
@@ -124,10 +132,13 @@ pub fn start_network_monitor(
                     } else {
                         "Aria User".to_string()
                     };
-                    
+
                     let _ = crate::network::discovery::rebroadcast_mdns(
                         daemon,
-                        &app_handle.state::<crate::AppState>().identity.public_key_hex,
+                        &app_handle
+                            .state::<crate::AppState>()
+                            .identity
+                            .public_key_hex,
                         &app_handle.state::<crate::AppState>().identity.fingerprint,
                         &display_name,
                         9473, // Will be updated from settings in a future iteration
@@ -135,11 +146,14 @@ pub fn start_network_monitor(
                 }
 
                 // Emit network change event
-                let _ = app_handle.emit("network:changed", NetworkChangedPayload {
-                    ips: new_ips.clone(),
-                    changed: true,
-                    mdns_degraded: is_degraded,
-                });
+                let _ = app_handle.emit(
+                    "network:changed",
+                    NetworkChangedPayload {
+                        ips: new_ips.clone(),
+                        changed: true,
+                        mdns_degraded: is_degraded,
+                    },
+                );
             }
         }
     });

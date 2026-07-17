@@ -23,10 +23,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Hide loading screen and show app after initialization
   const hideLoadingScreen = () => {
     if (loadingScreen) {
-      loadingScreen.classList.add('fade-out');
-      setTimeout(() => {
+      loadingScreen.classList.add('hidden');
+      loadingScreen.addEventListener('transitionend', () => {
         loadingScreen.style.display = 'none';
-      }, 5500);
+      }, { once: true });
     }
     if (app) {
       app.style.opacity = '1';

@@ -1,10 +1,10 @@
-use tokio::sync::mpsc;
-use tokio::time::{interval, Duration};
+use crate::db::peers;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tauri::{AppHandle, Emitter};
-use crate::db::peers;
+use tokio::sync::mpsc;
+use tokio::sync::Mutex;
+use tokio::time::{interval, Duration};
 
 /// Tracks heartbeat state for each connected peer
 #[derive(Debug, Clone)]

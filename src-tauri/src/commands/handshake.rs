@@ -36,10 +36,15 @@ pub async fn send_handshake(
     let envelope_bytes = envelope.to_bytes().map_err(|e| e.to_string())?;
 
     // Send via connection handle
-    let handle = conn_mgr.get(&fingerprint).await
+    let handle = conn_mgr
+        .get(&fingerprint)
+        .await
         .ok_or_else(|| "Connection handle not found".to_string())?;
 
-    handle.send_raw(&envelope_bytes).await.map_err(|e| e.to_string())?;
+    handle
+        .send_raw(&envelope_bytes)
+        .await
+        .map_err(|e| e.to_string())?;
 
     println!("[Handshake] Sent handshake to {}", fingerprint);
     Ok(())

@@ -1,5 +1,5 @@
-use rusqlite::{params, Connection};
 use anyhow::{Context, Result};
+use rusqlite::{params, Connection};
 use serde::Serialize;
 use specta::Type;
 
@@ -30,22 +30,26 @@ pub fn init_schema(conn: &Connection) -> Result<()> {
             FOREIGN KEY (peer_fingerprint) REFERENCES peers(fingerprint)
         )",
         [],
-    ).context("Failed to create messages table")?;
+    )
+    .context("Failed to create messages table")?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_messages_peer ON messages(peer_fingerprint)",
         [],
-    ).context("Failed to create peer index")?;
+    )
+    .context("Failed to create peer index")?;
 
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp)",
         [],
-    ).context("Failed to create timestamp index")?;
+    )
+    .context("Failed to create timestamp index")?;
 
     Ok(())
 }
 
 /// Store a new message in the database
+#[allow(clippy::too_many_arguments)]
 pub fn store_message(
     conn: &Connection,
     message_id: &str,
@@ -69,7 +73,8 @@ pub fn update_message_status(conn: &Connection, message_id: &str, status: &str) 
     conn.execute(
         "UPDATE messages SET status = ?1 WHERE message_id = ?2",
         [status, message_id],
-    ).context("Failed to update message status")?;
+    )
+    .context("Failed to update message status")?;
     Ok(())
 }
 
@@ -79,7 +84,7 @@ pub fn get_messages(conn: &Connection, peer_fingerprint: &str) -> Result<Vec<Mes
         "SELECT id, message_id, peer_fingerprint, direction, content, timestamp, reply_to, status
          FROM messages
          WHERE peer_fingerprint = ?1
-         ORDER BY timestamp ASC"
+         ORDER BY timestamp ASC",
     )?;
 
     let message_iter = stmt.query_map([peer_fingerprint], |row| {
@@ -108,7 +113,7 @@ pub fn get_message_by_id(conn: &Connection, message_id: &str) -> Result<Option<M
     let mut stmt = conn.prepare(
         "SELECT id, message_id, peer_fingerprint, direction, content, timestamp, reply_to, status
          FROM messages
-         WHERE message_id = ?1"
+         WHERE message_id = ?1",
     )?;
 
     let result = stmt.query_row([message_id], |row| {

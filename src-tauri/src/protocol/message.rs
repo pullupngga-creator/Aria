@@ -6,7 +6,7 @@ use uuid::Uuid;
 pub struct MessagePayload {
     pub message_id: String, // UUID
     pub content: String,
-    pub timestamp: i32, // Changed to i32 for Specta compatibility
+    pub timestamp: i32,           // Changed to i32 for Specta compatibility
     pub reply_to: Option<String>, // message_id being replied to
 }
 
@@ -23,8 +23,7 @@ impl MessagePayload {
 
     /// Extract message payload from an envelope
     pub fn from_envelope(envelope: &crate::protocol::Envelope) -> anyhow::Result<Self> {
-        serde_json::from_value(envelope.payload.clone())
-            .map_err(Into::into)
+        serde_json::from_value(envelope.payload.clone()).map_err(Into::into)
     }
 }
 
@@ -47,8 +46,7 @@ impl ReceiptPayload {
 
     /// Extract receipt payload from an envelope
     pub fn from_envelope(envelope: &crate::protocol::Envelope) -> anyhow::Result<Self> {
-        serde_json::from_value(envelope.payload.clone())
-            .map_err(Into::into)
+        serde_json::from_value(envelope.payload.clone()).map_err(Into::into)
     }
 }
 
@@ -69,8 +67,7 @@ impl TypingPayload {
 
     /// Extract typing payload from an envelope
     pub fn from_envelope(envelope: &crate::protocol::Envelope) -> anyhow::Result<Self> {
-        serde_json::from_value(envelope.payload.clone())
-            .map_err(Into::into)
+        serde_json::from_value(envelope.payload.clone()).map_err(Into::into)
     }
 }
 

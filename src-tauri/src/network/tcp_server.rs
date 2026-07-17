@@ -1,17 +1,14 @@
-use tokio::net::TcpListener;
-use tauri::{AppHandle, Emitter};
 use crate::network::connection_manager::{ConnectionHandle, ConnectionManager};
+use hex;
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::net::TcpListener;
 
 /// Bind the TCP listener on the given port and spawn the accept loop.
 /// Called once at startup from lib.rs::run(). Non-blocking — spawns a tokio task.
 ///
 /// Per RULES.md §2: use tokio::spawn for background tasks; never block the runtime.
 /// Uses tauri::async_runtime::spawn to ensure we're in the correct runtime context.
-pub fn start_tcp_server(
-    port: u16,
-    app_handle: AppHandle,
-    conn_mgr: ConnectionManager,
-) {
+pub fn start_tcp_server(port: u16, app_handle: AppHandle, conn_mgr: ConnectionManager) {
     tauri::async_runtime::spawn(async move {
         let addr = format!("0.0.0.0:{}", port);
         let listener = match TcpListener::bind(&addr).await {
@@ -65,28 +62,38 @@ async fn handle_inbound(
     let handshake_result = tokio::time::timeout(
         std::time::Duration::from_secs(30),
         wait_for_handshake(reader, temp_key.clone(), app.clone()),
-    ).await;
+    )
+    .await;
 
     match handshake_result {
         Ok(Ok(fingerprint)) => {
             // Handshake successful - rekey connection
-            println!("[TCP] Handshake successful, rekeying {} -> {}", temp_key, fingerprint);
+            println!(
+                "[TCP] Handshake successful, rekeying {} -> {}",
+                temp_key, fingerprint
+            );
             conn_mgr.rekey(&temp_key, fingerprint.clone()).await;
 
-            let _ = app.emit("peer:connected", serde_json::json!({
-                "fingerprint": fingerprint,
-                "direction": "inbound"
-            }));
+            let _ = app.emit(
+                "peer:connected",
+                serde_json::json!({
+                    "fingerprint": fingerprint,
+                    "direction": "inbound"
+                }),
+            );
 
             // Continue with normal read loop (would need to re-spawn with new key)
             // For now, close and let peer reconnect
         }
         Ok(Err(e)) => {
             eprintln!("[TCP] Handshake failed: {}", e);
-            let _ = app.emit("peer:handshake_rejected", serde_json::json!({
-                "key": temp_key,
-                "reason": format!("{:?}", e)
-            }));
+            let _ = app.emit(
+                "peer:handshake_rejected",
+                serde_json::json!({
+                    "key": temp_key,
+                    "reason": format!("{:?}", e)
+                }),
+            );
         }
         Err(_) => {
             eprintln!("[TCP] Handshake timeout from {}", peer_addr);
@@ -124,7 +131,10 @@ async fn wait_for_handshake(
 
     // Verify it's a handshake
     if envelope.message_type != crate::protocol::MessageType::Handshake {
-        return Err(anyhow::anyhow!("Expected handshake, got {:?}", envelope.message_type));
+        return Err(anyhow::anyhow!(
+            "Expected handshake, got {:?}",
+            envelope.message_type
+        ));
     }
 
     // Validate timestamp
@@ -166,7 +176,10 @@ pub async fn run_read_loop(
 
                 // Guard against malformed/huge payloads
                 if msg_len == 0 || msg_len > 64 * 1024 * 1024 {
-                    eprintln!("[TCP] Invalid message length {} from {}, closing", msg_len, key);
+                    eprintln!(
+                        "[TCP] Invalid message length {} from {}, closing",
+                        msg_len, key
+                    );
                     break;
                 }
 
@@ -186,14 +199,56 @@ pub async fn run_read_loop(
                             continue;
                         }
 
-                        // TODO: Verify signature (Step 3 will add public key lookup)
-                        // For now, just log and dispatch
-                        println!("[TCP] Received envelope from {}: type={:?}", key, envelope.message_type);
+                        // Look up peer's public key for signature verification
+                        let peer_pubkey = {
+                            let state = app.state::<crate::AppState>();
+                            let db = state.db.lock().ok();
+                            db.and_then(|conn| {
+                                crate::db::peers::get_peer_public_key(&conn, &envelope.sender)
+                                    .ok()
+                                    .flatten()
+                            })
+                        };
 
-                        // Dispatch envelope (stub - will be implemented in later steps)
-                        // For now, we need a dummy public key for the dispatcher
-                        let dummy_pubkey = ed25519_dalek::VerifyingKey::from_bytes(&[0u8; 32]).unwrap();
-                        crate::protocol::dispatcher::dispatch_envelope(envelope, app.clone(), dummy_pubkey).await;
+                        let pubkey = match peer_pubkey {
+                            Some(hex) => {
+                                let bytes = match hex::decode(&hex) {
+                                    Ok(b) => b,
+                                    Err(_) => continue,
+                                };
+                                let arr: [u8; 32] = match bytes.try_into() {
+                                    Ok(a) => a,
+                                    Err(_) => continue,
+                                };
+                                match ed25519_dalek::VerifyingKey::from_bytes(&arr) {
+                                    Ok(pk) => Some(pk),
+                                    Err(_) => continue,
+                                }
+                            }
+                            None => None,
+                        };
+
+                        // If we have a public key, verify signature; otherwise skip (unverified peer)
+                        if let Some(pubkey) = pubkey {
+                            if envelope.verify(&pubkey).is_err() {
+                                eprintln!("[TCP] Signature verification failed for {}", key);
+                                continue;
+                            }
+                        } else {
+                            eprintln!("[TCP] No public key for {}, skipping verification", key);
+                        }
+
+                        println!(
+                            "[TCP] Received envelope from {}: type={:?}",
+                            key, envelope.message_type
+                        );
+
+                        crate::protocol::dispatcher::dispatch_envelope(
+                            envelope,
+                            app.clone(),
+                            pubkey,
+                        )
+                        .await;
                     }
                     Err(e) => {
                         eprintln!("[TCP] Failed to parse envelope from {}: {}", key, e);

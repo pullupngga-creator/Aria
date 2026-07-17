@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use ed25519_dalek::{Verifier, Signature, VerifyingKey, Signer};
-use base64::Engine;
 use crate::crypto::Identity;
+use base64::Engine;
+use ed25519_dalek::{Signature, Signer, Verifier, VerifyingKey};
+use serde::{Deserialize, Serialize};
 
 /// Message type identifiers
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -25,7 +25,7 @@ pub struct Envelope {
     pub message_type: MessageType,
     pub sender: String, // Ed25519 public key fingerprint
     pub payload: serde_json::Value,
-    pub timestamp: i64, // Unix timestamp in seconds
+    pub timestamp: i64,    // Unix timestamp in seconds
     pub signature: String, // Base64-encoded Ed25519 signature
 }
 
