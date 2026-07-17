@@ -102,13 +102,25 @@ pub fn start_discovery(
     let conn = state.db.lock().map_err(|e| e.to_string())?;
     let settings = crate::db::settings::get_peer_settings(&conn).map_err(|e| e.to_string())?;
 
-    let daemon = crate::network::discovery::start_mdns_broadcast(
+    let daemon = match crate::network::discovery::start_mdns_broadcast(
         &state.identity.public_key_hex,
         &state.identity.fingerprint,
         &settings.display_name,
         settings.listen_port,
-    )
-    .map_err(|e| e.to_string())?;
+    ) {
+        Ok(daemon) => daemon,
+        Err(error) => {
+            let message = error.to_string();
+            let _ = app.emit(
+                "network:mdns_disabled",
+                serde_json::json!({
+                    "error": message,
+                    "degraded": true
+                }),
+            );
+            return Err(message);
+        }
+    };
 
     let (heartbeat_state, heartbeat_rx) = crate::network::heartbeat::HeartbeatState::new();
 
@@ -227,6 +239,7 @@ pub async fn connect_manual(
             is_online: true,
             ip_address: Some(ip),
             hostname: None,
+            port,
         },
     );
 

@@ -11,6 +11,7 @@ pub struct PeerDiscoveredPayload {
     pub is_online: bool,
     pub ip_address: Option<String>,
     pub hostname: Option<String>,
+    pub port: u16,
 }
 
 /// Get the primary (non-local) IP address from a list of addresses
@@ -44,6 +45,22 @@ fn get_all_ips_string(addresses: &[std::net::IpAddr]) -> String {
         .join(",")
 }
 
+/// Get usable local addresses for the mDNS service record.
+fn get_local_service_addresses() -> Result<String> {
+    let addresses: Vec<std::net::IpAddr> = local_ip_address::list_afinet_netifas()
+        .context("Failed to enumerate local network interfaces")?
+        .into_iter()
+        .map(|(_, address)| address)
+        .collect();
+
+    let addresses = get_all_ips_string(&addresses);
+    if addresses.is_empty() {
+        anyhow::bail!("No usable local network address found for mDNS");
+    }
+
+    Ok(addresses)
+}
+
 pub fn start_mdns_broadcast(
     public_key: &str,
     fingerprint: &str,
@@ -53,8 +70,11 @@ pub fn start_mdns_broadcast(
     let daemon = ServiceDaemon::new().context("Failed to create mDNS daemon")?;
 
     let service_type = "_aria._tcp.local.";
-    let instance_name = format!("{}-{}", display_name, fingerprint);
+    // Keep the human-readable name in TXT properties, but use a DNS-safe
+    // service instance and hostname for registration.
+    let instance_name = format!("aria-{}", fingerprint);
     let host_name = format!("{}.local.", instance_name);
+    let addresses = get_local_service_addresses()?;
 
     let mut properties = HashMap::new();
     properties.insert("id".to_string(), fingerprint.to_string());
@@ -66,7 +86,7 @@ pub fn start_mdns_broadcast(
         service_type,
         &instance_name,
         &host_name,
-        "",
+        addresses.as_str(),
         listen_port,
         Some(properties),
     )
@@ -99,6 +119,13 @@ pub fn start_mdns_listener(
             }
             Err(e) => {
                 eprintln!("[DISCOVERY] Failed to browse mDNS: {:#}", e);
+                if let Ok(mut daemon) = app_handle
+                    .state::<crate::AppState>()
+                    .mdns_daemon
+                    .lock()
+                {
+                    daemon.take();
+                }
                 let _ = app_handle.emit(
                     "network:mdns_disabled",
                     serde_json::json!({
@@ -210,6 +237,7 @@ pub fn start_mdns_listener(
                                 is_online: true,
                                 ip_address: primary_ip,
                                 hostname: Some(hostname),
+                                port,
                             },
                         );
                     }
@@ -241,6 +269,7 @@ pub fn start_mdns_listener(
                                     is_online: false,
                                     ip_address: None,
                                     hostname: None,
+                                    port: 0,
                                 },
                             );
                         }
@@ -251,6 +280,13 @@ pub fn start_mdns_listener(
         }
 
         println!("[DISCOVERY] Browse loop ended - browser stopped");
+        if let Ok(mut daemon) = app_handle
+            .state::<crate::AppState>()
+            .mdns_daemon
+            .lock()
+        {
+            daemon.take();
+        }
     });
 }
 
@@ -264,8 +300,9 @@ pub fn rebroadcast_mdns(
     listen_port: u16,
 ) -> Result<()> {
     let service_type = "_aria._tcp.local.";
-    let instance_name = format!("{}-{}", display_name, fingerprint);
+    let instance_name = format!("aria-{}", fingerprint);
     let host_name = format!("{}.local.", instance_name);
+    let addresses = get_local_service_addresses()?;
 
     let mut properties = HashMap::new();
     properties.insert("id".to_string(), fingerprint.to_string());
@@ -277,7 +314,7 @@ pub fn rebroadcast_mdns(
         service_type,
         &instance_name,
         &host_name,
-        "",
+        addresses.as_str(),
         listen_port,
         Some(properties),
     )

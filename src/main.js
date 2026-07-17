@@ -16,7 +16,7 @@ import { getPeerDisplayInfo } from './utils/peerUtils.js';
 
 const state = { activeId: null, currentChatView: null };
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const loadingScreen = document.getElementById('loading-screen');
   const app = document.querySelector('.app');
   
@@ -134,8 +134,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
   
-  // Initialize peer service
-  peerService.init();
+  // Initialize peer service before starting discovery so no discovery events
+  // are emitted before the frontend has subscribed to them.
+  try {
+    await peerService.init();
+  } catch (err) {
+    console.error('[PeerService] Failed to initialize:', err);
+  }
 
   // Initialize connection service
   connectionService.init();
@@ -152,6 +157,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // Expose globally for ChatView
   window.messageService = messageService;
   window.typingService = typingService;
+
+  // Start discovery after all frontend listeners are ready. The backend only
+  // starts the TCP server during setup; discovery is owned by the webview so
+  // its first peer events cannot be lost during startup.
+  try {
+    const discoveryResult = await commands.startDiscovery();
+    if (discoveryResult.status === 'error') {
+      console.error('[Discovery] Failed to start:', discoveryResult.error);
+    }
+  } catch (err) {
+    console.error('[Discovery] Failed to start:', err);
+  }
 
   // Theme Toggle
   const themeToggle = document.getElementById('theme-toggle');

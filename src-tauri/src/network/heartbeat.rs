@@ -95,6 +95,7 @@ pub fn start_heartbeat_monitor(
                             is_online: false,
                             ip_address: None,
                             hostname: None,
+                            port: 0,
                         });
                     }
                 }

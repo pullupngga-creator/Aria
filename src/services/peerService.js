@@ -13,13 +13,8 @@ export const peerService = {
   _onMdnsDisabled: null,
 
   async init() {
-    // 1. Hydrate store from DB (known peers survive app restarts)
-    const result = await commands.listPeers();
-    if (result.status === 'ok') {
-      result.data.forEach(peer => peerStore.upsert(peer));
-    }
-
-    // 2. Listen for live discovery events
+    // Subscribe before hydrating so a peer discovered during startup cannot
+    // be lost between the database query and event registration.
     const unPeerDisc = await listen('peer:discovered', (event) => {
       const payload = event.payload;
       const existing = peerStore.get(payload.fingerprint);
@@ -31,7 +26,7 @@ export const peerService = {
         is_online: payload.is_online,
         trust_level: existing?.trust_level || 'untrusted',
         id: existing?.id || 0,
-        port: existing?.port || 9473,
+        port: payload.port || existing?.port || 9473,
         ip_address: payload.ip_address || existing?.ip_address,
         hostname: payload.hostname || existing?.hostname
       });
@@ -68,6 +63,19 @@ export const peerService = {
     });
 
     this._unlisteners.push(unPeerDisc, unPeerOff, unNetChanged, unMdnsDisabled);
+
+    // Hydrate store from DB after listeners are active. Known peers survive
+    // app restarts even if their discovery event happened before launch.
+    try {
+      const result = await commands.listPeers();
+      if (result.status === 'ok') {
+        result.data.forEach(peer => peerStore.upsert(peer));
+      } else {
+        console.error('[PeerService] Failed to load peers:', result.error);
+      }
+    } catch (err) {
+      console.error('[PeerService] Failed to load peers:', err);
+    }
   },
 
   /**

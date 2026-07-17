@@ -102,12 +102,6 @@ pub fn run() {
             };
             network::tcp_server::start_tcp_server(tcp_port, app.handle().clone(), conn_mgr_clone);
 
-            // Auto-start mDNS discovery after TCP server is ready
-            let state = app.state::<AppState>();
-            if let Err(e) = network::start_discovery(state, app.handle().clone()) {
-                eprintln!("Failed to start mDNS discovery: {}", e);
-            }
-
             Ok(())
         })
         .run(tauri::generate_context!())

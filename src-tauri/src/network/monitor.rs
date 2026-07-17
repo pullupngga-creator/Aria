@@ -133,6 +133,14 @@ pub fn start_network_monitor(app_handle: AppHandle, network_state: NetworkState)
                         "Aria User".to_string()
                     };
 
+                    let listen_port = if let Ok(conn) = crate::db::get_connection() {
+                        crate::db::settings::get_peer_settings(&conn)
+                            .map(|settings| settings.listen_port)
+                            .unwrap_or(9473)
+                    } else {
+                        9473
+                    };
+
                     let _ = crate::network::discovery::rebroadcast_mdns(
                         daemon,
                         &app_handle
@@ -141,7 +149,7 @@ pub fn start_network_monitor(app_handle: AppHandle, network_state: NetworkState)
                             .public_key_hex,
                         &app_handle.state::<crate::AppState>().identity.fingerprint,
                         &display_name,
-                        9473, // Will be updated from settings in a future iteration
+                        listen_port,
                     );
                 }
 
