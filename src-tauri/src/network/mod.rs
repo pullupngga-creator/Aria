@@ -9,6 +9,85 @@ use tauri::Emitter;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 
+/// Internal function to connect to a peer by fingerprint.
+/// Can be called from both Tauri commands and from mDNS discovery listener.
+pub async fn connect_to_peer_internal(
+    state: &tauri::State<'_, crate::AppState>,
+    app: &tauri::AppHandle,
+    fingerprint: &str,
+) -> Result<(), String> {
+    let conn_mgr = &state.connection_manager;
+
+    // Already connected? Return early — idempotent.
+    if conn_mgr.is_connected(fingerprint).await {
+        return Ok(());
+    }
+
+    // Lookup peer address from DB
+    let (ip, port) = {
+        let conn = state.db.lock().map_err(|e| e.to_string())?;
+        let peers = crate::db::peers::list_peers(&conn).map_err(|e| e.to_string())?;
+        let peer = peers
+            .into_iter()
+            .find(|p| p.fingerprint == fingerprint)
+            .ok_or_else(|| format!("Peer '{}' not found in database", fingerprint))?;
+        let ip = peer
+            .ip_address
+            .ok_or_else(|| "Peer has no known IP address".to_string())?;
+        let port = peer.port as u16;
+        (ip, port)
+    };
+
+    let addr = format!("{}:{}", ip, port);
+
+    // Connect with timeout
+    let stream = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        tokio::net::TcpStream::connect(&addr),
+    )
+    .await
+    .map_err(|_| format!("Connection to {} timed out", addr))?
+    .map_err(|e| format!("Failed to connect to {}: {}", addr, e))?;
+
+    let (reader, writer) = stream.into_split();
+    let handle =
+        crate::network::connection_manager::ConnectionHandle::new(fingerprint.to_string(), writer);
+    conn_mgr.insert(fingerprint.to_string(), handle).await;
+
+    // Notify frontend immediately
+    let _ = app.emit(
+        "peer:connected",
+        serde_json::json!({
+            "fingerprint": fingerprint,
+            "direction": "outbound"
+        }),
+    );
+
+    // Spawn persistent read loop for this outbound stream
+    let fp_clone = fingerprint.to_string();
+    let app_clone = app.clone();
+    let mgr_clone = conn_mgr.clone();
+    tokio::spawn(async move {
+        crate::network::tcp_server::run_read_loop(
+            reader,
+            fp_clone.clone(),
+            app_clone.clone(),
+            mgr_clone.clone(),
+        )
+        .await;
+
+        // Cleanup when loop exits
+        mgr_clone.remove(&fp_clone).await;
+        let _ = app_clone.emit(
+            "peer:disconnected",
+            serde_json::json!({ "fingerprint": fp_clone }),
+        );
+        println!("[TCP] Outbound connection to {} closed", fp_clone);
+    });
+
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn start_discovery(

@@ -90,12 +90,15 @@ pub fn start_mdns_listener(
     my_fingerprint: String,
     heartbeat_state: crate::network::heartbeat::HeartbeatState,
 ) {
+    println!("[DISCOVERY] Starting mDNS browser for _aria._tcp.local.");
     tauri::async_runtime::spawn(async move {
         let receiver = match daemon.browse("_aria._tcp.local.") {
-            Ok(r) => r,
+            Ok(r) => {
+                println!("[DISCOVERY] Browser started successfully");
+                r
+            }
             Err(e) => {
-                eprintln!("Failed to browse mDNS: {:#}", e);
-                // Emit mDNS disabled event
+                eprintln!("[DISCOVERY] Failed to browse mDNS: {:#}", e);
                 let _ = app_handle.emit(
                     "network:mdns_disabled",
                     serde_json::json!({
@@ -110,12 +113,18 @@ pub fn start_mdns_listener(
         while let Ok(event) = receiver.recv_async().await {
             match event {
                 ServiceEvent::ServiceResolved(info) => {
+                    let fullname = info.get_fullname();
+                    println!("[DISCOVERY] ServiceResolved: {}", fullname);
+
                     let properties = info.get_properties();
                     let fingerprint = properties.get_property_val_str("id");
 
                     if let Some(fp) = fingerprint {
+                        println!("[DISCOVERY] Parsed fingerprint: {}", fp);
+
                         if fp == my_fingerprint {
-                            continue; // Ignore our own broadcast
+                            println!("[DISCOVERY] Ignoring self: {}", fp);
+                            continue;
                         }
 
                         let display_name = properties
@@ -135,6 +144,11 @@ pub fn start_mdns_listener(
                         let port = info.get_port();
                         let hostname = info.get_hostname().to_string();
 
+                        println!(
+                            "[DISCOVERY] Peer details: fp={}, ip={:?}, port={}, hostname={}",
+                            fp, primary_ip, port, hostname
+                        );
+
                         {
                             let state = app_handle.state::<crate::AppState>();
                             let conn = state.db.lock().unwrap();
@@ -144,6 +158,7 @@ pub fn start_mdns_listener(
                                 ip.split('.').take(3).collect::<Vec<_>>().join(".").into()
                             });
 
+                            println!("[DISCOVERY] Upserting peer: {}", fp);
                             if let Err(e) = peers::upsert_peer(
                                 &conn,
                                 &public_key,
@@ -154,15 +169,35 @@ pub fn start_mdns_listener(
                                 port,
                                 network_interface.as_deref(),
                             ) {
-                                eprintln!("Failed to upsert peer: {:#}", e);
+                                eprintln!("[DISCOVERY] Failed to upsert peer: {:#}", e);
                             }
                         }
+
+                        // Auto-connect to the discovered peer
+                        let fp_clone = fp.to_string();
+                        let app_handle_clone = app_handle.clone();
+                        tokio::spawn(async move {
+                            let state = app_handle_clone.state::<crate::AppState>();
+                            if let Err(e) = crate::network::connect_to_peer_internal(
+                                &state,
+                                &app_handle_clone,
+                                &fp_clone,
+                            )
+                            .await
+                            {
+                                eprintln!(
+                                    "[DISCOVERY] Auto-connect failed for {}: {}",
+                                    fp_clone, e
+                                );
+                            }
+                        });
 
                         // Notify heartbeat
                         let _ = heartbeat_state.sender().send(
                             crate::network::heartbeat::HeartbeatAction::Seen(fp.to_string()),
                         );
 
+                        println!("[DISCOVERY] Emitting peer:discovered for {}", fp);
                         let _ = app_handle.emit(
                             "peer:discovered",
                             PeerDiscoveredPayload {
@@ -176,6 +211,7 @@ pub fn start_mdns_listener(
                     }
                 }
                 ServiceEvent::ServiceRemoved(_, fullname) => {
+                    println!("[DISCOVERY] ServiceRemoved: {}", fullname);
                     // fullname format: name-fingerprint._aria._tcp.local.
                     let parts: Vec<&str> = fullname.split("._aria").collect();
                     if let Some(instance_name) = parts.first() {
@@ -189,7 +225,7 @@ pub fn start_mdns_listener(
                                 let state = app_handle.state::<crate::AppState>();
                                 let conn = state.db.lock().unwrap();
                                 if let Err(e) = peers::set_peer_offline(&conn, fingerprint) {
-                                    eprintln!("Failed to set peer offline: {:#}", e);
+                                    eprintln!("[DISCOVERY] Failed to set peer offline: {:#}", e);
                                 }
                             }
 
@@ -209,6 +245,8 @@ pub fn start_mdns_listener(
                 _ => {}
             }
         }
+
+        println!("[DISCOVERY] Browse loop ended - browser stopped");
     });
 }
 

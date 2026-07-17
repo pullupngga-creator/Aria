@@ -44,7 +44,7 @@ pub fn start_tcp_server(port: u16, app_handle: AppHandle, conn_mgr: ConnectionMa
 /// At this step the peer is stored under a temporary IP-based key.
 /// Step 3 (handshake) will call `conn_mgr.rekey()` to replace it with a fingerprint.
 async fn handle_inbound(
-    stream: tokio::net::TcpStream,
+    mut stream: tokio::net::TcpStream,
     peer_addr: std::net::SocketAddr,
     app: AppHandle,
     conn_mgr: ConnectionManager,
@@ -52,16 +52,12 @@ async fn handle_inbound(
     // Temporary key until fingerprint is established via handshake (Phase 2, Step 3)
     let temp_key = peer_addr.ip().to_string();
 
-    let (reader, writer) = stream.into_split();
-    let handle = ConnectionHandle::new(temp_key.clone(), writer);
-    conn_mgr.insert(temp_key.clone(), handle).await;
-
     println!("[TCP] Inbound connection from {}", peer_addr);
 
-    // Wait for handshake with timeout (30 seconds)
+    // Wait for handshake with timeout (30 seconds) - work on the whole stream
     let handshake_result = tokio::time::timeout(
         std::time::Duration::from_secs(30),
-        wait_for_handshake(reader, temp_key.clone(), app.clone()),
+        wait_for_handshake(&mut stream, temp_key.clone(), app.clone()),
     )
     .await;
 
@@ -82,8 +78,32 @@ async fn handle_inbound(
                 }),
             );
 
-            // Continue with normal read loop (would need to re-spawn with new key)
-            // For now, close and let peer reconnect
+            // Now split the stream and spawn the read loop for the verified peer
+            let (reader, writer) = stream.into_split();
+            let handle = ConnectionHandle::new(fingerprint.clone(), writer);
+            conn_mgr.insert(fingerprint.clone(), handle).await;
+
+            // Spawn persistent read loop for this inbound stream
+            let fp_clone = fingerprint.clone();
+            let app_clone = app.clone();
+            let mgr_clone = conn_mgr.clone();
+            tokio::spawn(async move {
+                crate::network::tcp_server::run_read_loop(
+                    reader,
+                    fp_clone.clone(),
+                    app_clone.clone(),
+                    mgr_clone.clone(),
+                )
+                .await;
+
+                // Cleanup when loop exits
+                mgr_clone.remove(&fp_clone).await;
+                let _ = app_clone.emit(
+                    "peer:disconnected",
+                    serde_json::json!({ "fingerprint": fp_clone }),
+                );
+                println!("[TCP] Inbound connection to {} closed", fp_clone);
+            });
         }
         Ok(Err(e)) => {
             eprintln!("[TCP] Handshake failed: {}", e);
@@ -94,20 +114,20 @@ async fn handle_inbound(
                     "reason": format!("{:?}", e)
                 }),
             );
+            // Cleanup on handshake failure
+            conn_mgr.remove(&temp_key).await;
         }
         Err(_) => {
             eprintln!("[TCP] Handshake timeout from {}", peer_addr);
+            // Cleanup on timeout
+            conn_mgr.remove(&temp_key).await;
         }
     }
-
-    // Cleanup
-    conn_mgr.remove(&temp_key).await;
-    println!("[TCP] Inbound disconnected: {}", peer_addr);
 }
 
-/// Wait for handshake envelope from peer
+/// Wait for handshake envelope from peer (reads from whole stream, not split)
 async fn wait_for_handshake(
-    mut reader: tokio::net::tcp::OwnedReadHalf,
+    stream: &mut tokio::net::TcpStream,
     _key: String,
     _app: AppHandle,
 ) -> anyhow::Result<String> {
@@ -115,7 +135,7 @@ async fn wait_for_handshake(
     let mut len_buf = [0u8; 4];
 
     // Read length prefix
-    reader.read_exact(&mut len_buf).await?;
+    stream.read_exact(&mut len_buf).await?;
     let msg_len = u32::from_be_bytes(len_buf) as usize;
 
     if msg_len == 0 || msg_len > 64 * 1024 * 1024 {
@@ -124,7 +144,7 @@ async fn wait_for_handshake(
 
     // Read payload
     let mut payload = vec![0u8; msg_len];
-    reader.read_exact(&mut payload).await?;
+    stream.read_exact(&mut payload).await?;
 
     // Parse envelope
     let envelope = crate::protocol::Envelope::from_bytes(&payload)?;
